@@ -136,6 +136,11 @@ const subscriptionTypeDefs = `#graphql
     ledgerClosedAt: String!
     txHash: String!
     eventId: String!
+    network: Network!
+  }
+
+  extend type Transfer {
+    network: Network!
   }
 
   type Subscription {
@@ -158,6 +163,7 @@ function subscriptionNetwork(arg: string | undefined, ctx: GraphQLContext | unde
 function formatHostFnLog(log: HostFnLogEvent) {
   return {
     ...log,
+    network: log.network.toUpperCase(),
     ledgerClosedAt:
       log.ledgerClosedAt instanceof Date
         ? log.ledgerClosedAt.toISOString()
@@ -220,6 +226,7 @@ function buildSubscriptionSchema(): GraphQLSchema {
           const transfer = payload as TransferEvent;
           return {
             ...formatTransfer(transfer as unknown as Record<string, unknown>),
+            network: transfer.network.toUpperCase(),
             displayAmount: toDisplayAmount(
               transfer.amount,
               getCachedTokenDecimals(transfer.contractId, transfer.network),
