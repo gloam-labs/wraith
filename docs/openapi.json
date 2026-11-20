@@ -946,8 +946,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": true,
             "name": "address",
@@ -985,7 +984,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": false,
             "name": "token",
@@ -1156,7 +1155,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "eventType": {
                             "type": "string",
@@ -1170,14 +1169,12 @@
                           "fromAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "toAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "amount": {
                             "type": "string"
@@ -1296,8 +1293,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": true,
             "name": "address",
@@ -1335,7 +1331,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": false,
             "name": "token",
@@ -1506,7 +1502,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "eventType": {
                             "type": "string",
@@ -1520,14 +1516,12 @@
                           "fromAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "toAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "amount": {
                             "type": "string"
@@ -1646,8 +1640,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": true,
             "name": "address",
@@ -1685,7 +1678,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": false,
             "name": "token",
@@ -1856,7 +1849,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "eventType": {
                             "type": "string",
@@ -1870,14 +1863,12 @@
                           "fromAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "toAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "amount": {
                             "type": "string"
@@ -1996,8 +1987,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": true,
             "name": "address",
@@ -2035,7 +2025,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": false,
             "name": "token",
@@ -2185,6 +2175,7 @@
           {
             "schema": {
               "type": "string",
+              "pattern": "^[0-9a-fA-F]{64}$",
               "description": "Transaction hash"
             },
             "required": true,
@@ -2212,7 +2203,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "eventType": {
                             "type": "string",
@@ -2226,14 +2217,12 @@
                           "fromAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "toAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "amount": {
                             "type": "string"
@@ -2349,8 +2338,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": true,
             "name": "address",
@@ -2419,8 +2407,7 @@
                   "properties": {
                     "address": {
                       "type": "string",
-                      "minLength": 1,
-                      "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                      "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                     },
                     "window": {
                       "type": "object",
@@ -2451,7 +2438,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "totalReceived": {
                             "type": "string"
@@ -2561,8 +2548,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": true,
             "name": "address",
@@ -2631,8 +2617,7 @@
                   "properties": {
                     "address": {
                       "type": "string",
-                      "minLength": 1,
-                      "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                      "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                     },
                     "window": {
                       "type": "object",
@@ -2663,7 +2648,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "totalReceived": {
                             "type": "string"
@@ -2774,8 +2759,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": true,
             "name": "address",
@@ -2792,8 +2776,7 @@
                   "properties": {
                     "address": {
                       "type": "string",
-                      "minLength": 1,
-                      "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                      "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                     },
                     "network": {
                       "type": "string",
@@ -2810,7 +2793,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "balance": {
                             "type": "string"
@@ -2911,8 +2894,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": true,
             "name": "address",
@@ -2950,7 +2932,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": false,
             "name": "token",
@@ -3121,7 +3103,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "eventType": {
                             "type": "string",
@@ -3135,14 +3117,12 @@
                           "fromAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "toAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "amount": {
                             "type": "string"
@@ -3865,7 +3845,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": true,
             "name": "contractId",
@@ -3935,7 +3915,7 @@
                     "contractId": {
                       "type": "string",
                       "pattern": "^C[A-Z2-7]{55}$",
-                      "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                      "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                     },
                     "total": {
                       "type": "integer"
@@ -3954,7 +3934,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "functionName": {
                             "type": "string"
@@ -4244,7 +4224,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "tokenId": {
                             "type": "string"
@@ -4252,14 +4232,12 @@
                           "fromAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "toAddress": {
                             "type": "string",
                             "nullable": true,
-                            "minLength": 1,
-                            "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                           },
                           "ledger": {
                             "type": "integer"
@@ -4369,7 +4347,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": true,
             "name": "contract",
@@ -4396,15 +4374,14 @@
                     "contract": {
                       "type": "string",
                       "pattern": "^C[A-Z2-7]{55}$",
-                      "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                      "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                     },
                     "token_id": {
                       "type": "string"
                     },
                     "owner": {
                       "type": "string",
-                      "minLength": 1,
-                      "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                      "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                     },
                     "metadata": {
                       "type": "object",
@@ -4605,7 +4582,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "transferCount": {
                             "type": "integer"
@@ -4896,7 +4873,7 @@
                           "contractId": {
                             "type": "string",
                             "pattern": "^C[A-Z2-7]{55}$",
-                            "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+                            "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                           },
                           "symbol": {
                             "type": "string"
@@ -5318,8 +5295,8 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "nullable": true,
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": false,
             "name": "address",
@@ -5340,7 +5317,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": false,
             "name": "token",
@@ -5503,8 +5480,8 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              "nullable": true,
+              "example": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
             },
             "required": false,
             "name": "address",
@@ -5525,7 +5502,7 @@
             "schema": {
               "type": "string",
               "pattern": "^C[A-Z2-7]{55}$",
-              "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
+              "example": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
             },
             "required": false,
             "name": "token",

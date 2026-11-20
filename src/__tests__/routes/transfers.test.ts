@@ -42,11 +42,15 @@ const mockGetLatestLedger = getLatestLedger as jest.MockedFunction<typeof getLat
 
 // ── Seed data factory ─────────────────────────────────────────────────────────
 const CONTRACT_A = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM";
-const CONTRACT_B = "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBD2KM";
+const CONTRACT_B = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4";
 
 const ALICE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
-const BOB   = "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWWHF";
-const CAROL = "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCWWHF";
+const BOB   = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEGWF";
+const CAROL = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGO6V";
+const UNKNOWN_ADDRESS = "GA5WUJ54Z23KILLCUOUNAKTPBVZWKMQVO4O6EQ5GHLAERIMLLHNCSKYH";
+
+const VALID_TX_HASH = "e6a506f95d3cd66a8ab3c0fbb9b47ab4a5d4ed35fb401c202a18a8c3d3231faa";
+const UNKNOWN_TX_HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 type TransferOverrides = Partial<Omit<ReturnType<typeof baseTransfer>, "fromAddress" | "toAddress">> & {
   fromAddress?: string | null;
@@ -68,7 +72,7 @@ function baseTransfer() {
     amount: "10000000000",        // 1000.0000000 tokens
     ledger: 1000,
     ledgerClosedAt: new Date("2025-01-01T00:00:00Z"),
-    txHash: "aaaa1111",
+    txHash: VALID_TX_HASH,
     eventId: "evt-001",
     isSac: false,
     createdAt: new Date("2025-01-01T00:00:01Z"),
@@ -103,8 +107,8 @@ const SEED_TRANSFERS = [
   // clawback events
   makeTransfer({ id: 18, eventId: "e-018", fromAddress: ALICE, toAddress: null, contractId: CONTRACT_B, eventType: "clawback", ledger: 1018, amount: "180000000" }),
   // Same txHash group for tx tests
-  makeTransfer({ id: 19, eventId: "e-019", fromAddress: BOB, toAddress: ALICE, contractId: CONTRACT_A, txHash: "txhash-multi", ledger: 1019, amount: "190000000" }),
-  makeTransfer({ id: 20, eventId: "e-020", fromAddress: CAROL, toAddress: ALICE, contractId: CONTRACT_B, txHash: "txhash-multi", ledger: 1019, amount: "200000000" }),
+  makeTransfer({ id: 19, eventId: "e-019", fromAddress: BOB, toAddress: ALICE, contractId: CONTRACT_A, txHash: VALID_TX_HASH, ledger: 1019, amount: "190000000" }),
+  makeTransfer({ id: 20, eventId: "e-020", fromAddress: CAROL, toAddress: ALICE, contractId: CONTRACT_B, txHash: VALID_TX_HASH, ledger: 1019, amount: "200000000" }),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,11 +191,38 @@ describe("Transfer route handlers", () => {
     it("returns empty array for an unknown address", async () => {
       mockQueryTransfers.mockResolvedValue({ total: 0, transfers: [], hasMore: false, nextCursor: null });
 
-      const res = await request(app).get("/transfers/incoming/GUNKNOWNADDRESS");
+      const res = await request(app).get(`/transfers/incoming/${UNKNOWN_ADDRESS}`);
 
       expect(res.status).toBe(200);
       expect(res.body.total).toBe(0);
       expect(res.body.transfers).toHaveLength(0);
+    });
+
+    it("returns 400 for an invalid address", async () => {
+      const res = await request(app).get("/transfers/incoming/hello");
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid Stellar address");
+      expect(mockQueryTransfers).not.toHaveBeenCalled();
+    });
+
+    it("accepts every address kind the indexer stores", async () => {
+      const addressKinds = [
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", // Ed25519 public key
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM", // Contract
+        "MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB5IG", // Muxed account
+        "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFMUE", // Claimable balance
+        "LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABLIR", // Liquidity pool
+      ];
+
+      for (const addr of addressKinds) {
+        mockQueryTransfers.mockResolvedValueOnce({ total: 0, transfers: [], hasMore: false, nextCursor: null });
+        const res = await request(app).get(`/transfers/incoming/${addr}`);
+        expect(res.status).toBe(200);
+        expect(mockQueryTransfers).toHaveBeenCalledWith(
+          expect.objectContaining({ address: addr })
+        );
+      }
     });
 
     it("forwards contractId filter to queryTransfers", async () => {
@@ -361,10 +392,37 @@ describe("Transfer route handlers", () => {
     it("returns empty array for address with no outgoing transfers", async () => {
       mockQueryTransfers.mockResolvedValue({ total: 0, transfers: [], hasMore: false, nextCursor: null });
 
-      const res = await request(app).get(`/transfers/outgoing/GNOBODY`);
+      const res = await request(app).get(`/transfers/outgoing/${UNKNOWN_ADDRESS}`);
 
       expect(res.status).toBe(200);
       expect(res.body.transfers).toHaveLength(0);
+    });
+
+    it("returns 400 for an invalid address", async () => {
+      const res = await request(app).get("/transfers/outgoing/hello");
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid Stellar address");
+      expect(mockQueryTransfers).not.toHaveBeenCalled();
+    });
+
+    it("accepts every address kind the indexer stores", async () => {
+      const addressKinds = [
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+        "MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB5IG",
+        "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFMUE",
+        "LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABLIR",
+      ];
+
+      for (const addr of addressKinds) {
+        mockQueryTransfers.mockResolvedValueOnce({ total: 0, transfers: [], hasMore: false, nextCursor: null });
+        const res = await request(app).get(`/transfers/outgoing/${addr}`);
+        expect(res.status).toBe(200);
+        expect(mockQueryTransfers).toHaveBeenCalledWith(
+          expect.objectContaining({ address: addr })
+        );
+      }
     });
 
     it("attaches displayAmount for large i128 amounts", async () => {
@@ -415,10 +473,37 @@ describe("Transfer route handlers", () => {
     it("returns empty array for unknown address", async () => {
       mockQueryAllTransfers.mockResolvedValue({ total: 0, transfers: [], hasMore: false, nextCursor: null });
 
-      const res = await request(app).get("/transfers/address/GUNKNOWN");
+      const res = await request(app).get(`/transfers/address/${UNKNOWN_ADDRESS}`);
 
       expect(res.status).toBe(200);
       expect(res.body.total).toBe(0);
+    });
+
+    it("returns 400 for an invalid address", async () => {
+      const res = await request(app).get("/transfers/address/hello");
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid Stellar address");
+      expect(mockQueryAllTransfers).not.toHaveBeenCalled();
+    });
+
+    it("accepts every address kind the indexer stores", async () => {
+      const addressKinds = [
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+        "MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB5IG",
+        "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFMUE",
+        "LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABLIR",
+      ];
+
+      for (const addr of addressKinds) {
+        mockQueryAllTransfers.mockResolvedValueOnce({ total: 0, transfers: [], hasMore: false, nextCursor: null });
+        const res = await request(app).get(`/transfers/address/${addr}`);
+        expect(res.status).toBe(200);
+        expect(mockQueryAllTransfers).toHaveBeenCalledWith(
+          expect.objectContaining({ address: addr })
+        );
+      }
     });
 
     it("honours pagination params", async () => {
@@ -517,20 +602,20 @@ describe("Transfer route handlers", () => {
   // ── /transfers/tx/:txHash ──────────────────────────────────────────────────
   describe("GET /transfers/tx/:txHash", () => {
     it("returns all transfers for a given transaction hash", async () => {
-      const txTransfers = SEED_TRANSFERS.filter((t) => t.txHash === "txhash-multi");
+      const txTransfers = SEED_TRANSFERS.filter((t) => t.txHash === VALID_TX_HASH);
       mockQueryByTxHash.mockResolvedValue(txTransfers);
 
-      const res = await request(app).get("/transfers/tx/txhash-multi");
+      const res = await request(app).get(`/transfers/tx/${VALID_TX_HASH}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.transfers).toHaveLength(2);
+      expect(res.body.transfers).toHaveLength(txTransfers.length);
       expect(res.body.transfers[0]).toHaveProperty("displayAmount");
     });
 
     it("returns empty array for unknown txHash", async () => {
       mockQueryByTxHash.mockResolvedValue([]);
 
-      const res = await request(app).get("/transfers/tx/nonexistent");
+      const res = await request(app).get(`/transfers/tx/${UNKNOWN_TX_HASH}`);
 
       expect(res.status).toBe(200);
       expect(res.body.transfers).toHaveLength(0);
@@ -539,9 +624,26 @@ describe("Transfer route handlers", () => {
     it("calls queryByTxHash with the exact txHash from path", async () => {
       mockQueryByTxHash.mockResolvedValue([]);
 
-      await request(app).get("/transfers/tx/abc123def456");
+      await request(app).get(`/transfers/tx/${UNKNOWN_TX_HASH}`);
 
-      expect(mockQueryByTxHash).toHaveBeenCalledWith("abc123def456", "testnet");
+      expect(mockQueryByTxHash).toHaveBeenCalledWith(UNKNOWN_TX_HASH, "testnet");
+    });
+
+    it("returns 400 for an invalid txHash that is too short", async () => {
+      const res = await request(app).get("/transfers/tx/abc123");
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid transaction hash: Must be 64 hex characters");
+      expect(mockQueryByTxHash).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 for an invalid txHash containing non-hex characters", async () => {
+      const nonHexHash = "g".repeat(64);
+      const res = await request(app).get(`/transfers/tx/${nonHexHash}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid transaction hash: Must be 64 hex characters");
+      expect(mockQueryByTxHash).not.toHaveBeenCalled();
     });
   });
 
@@ -573,10 +675,37 @@ describe("Transfer route handlers", () => {
     it("returns empty tokens array for unknown address", async () => {
       mockQuerySummary.mockResolvedValue([]);
 
-      const res = await request(app).get("/summary/GNOBODY");
+      const res = await request(app).get(`/summary/${UNKNOWN_ADDRESS}`);
 
       expect(res.status).toBe(200);
       expect(res.body.tokens).toHaveLength(0);
+    });
+
+    it("returns 400 for an invalid address", async () => {
+      const res = await request(app).get("/summary/hello");
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid Stellar address");
+      expect(mockQuerySummary).not.toHaveBeenCalled();
+    });
+
+    it("accepts every address kind the indexer stores", async () => {
+      const addressKinds = [
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+        "MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB5IG",
+        "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFMUE",
+        "LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABLIR",
+      ];
+
+      for (const addr of addressKinds) {
+        mockQuerySummary.mockResolvedValueOnce([]);
+        const res = await request(app).get(`/summary/${addr}`);
+        expect(res.status).toBe(200);
+        expect(mockQuerySummary).toHaveBeenCalledWith(
+          expect.objectContaining({ address: addr })
+        );
+      }
     });
 
     it("passes date window to querySummary", async () => {
@@ -905,6 +1034,14 @@ describe("Transfer route handlers", () => {
       expect(res.status).toBe(200);
       expect(res.text).toContain('"CONTRACT,WITH,COMMAS"');
     });
+
+    it("returns 400 for an invalid address on export.csv", async () => {
+      const res = await request(app).get("/transfers/address/hello/export.csv");
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid Stellar address");
+      expect(mockQueryAllTransfers).not.toHaveBeenCalled();
+    });
   });
 
   // ── JSON:API Content Negotiation ─────────────────────────────────────
@@ -939,11 +1076,11 @@ describe("Transfer route handlers", () => {
     });
 
     it("returns JSON:API format for transfers/tx/:txHash", async () => {
-      const txTransfers = [makeTransfer({ txHash: "txhash-multi", ledger: 1019 })];
+      const txTransfers = [makeTransfer({ txHash: VALID_TX_HASH, ledger: 1019 })];
       mockQueryByTxHash.mockResolvedValue(txTransfers);
 
       const res = await request(app)
-        .get("/transfers/tx/txhash-multi")
+        .get(`/transfers/tx/${VALID_TX_HASH}`)
         .set("Accept", "application/vnd.api+json");
 
       expect(res.status).toBe(200);

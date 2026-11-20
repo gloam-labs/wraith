@@ -1,4 +1,5 @@
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
+import { StrKey } from "@stellar/stellar-sdk";
 import { z } from "zod";
 
 extendZodWithOpenApi(z);
@@ -111,15 +112,27 @@ const optionalCommaList = (items: z.ZodTypeAny, description?: string) =>
     z.array(items).optional().openapi({ description })
   );
 
-const contractAddressSchema = z
+export function isValidStellarAddress(address: string): boolean {
+  return (
+    StrKey.isValidEd25519PublicKey(address) ||
+    StrKey.isValidContract(address) ||
+    StrKey.isValidMed25519PublicKey(address) ||
+    StrKey.isValidClaimableBalance(address) ||
+    StrKey.isValidLiquidityPool(address)
+  );
+}
+
+export const contractAddressSchema = z
   .string()
   .regex(/^C[A-Z2-7]{55}$/, 'Invalid token address: Must be a 56-character Stellar contract address starting with "C"')
-  .openapi({ example: "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B" });
+  .openapi({ example: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM" });
 
-const stellarAddressSchema = z
+export const stellarAddressSchema = z
   .string()
-  .min(1)
-  .openapi({ example: "GABCDEFGHIJKLMNOPQRSTUVWXYZ" });
+  .refine(isValidStellarAddress, {
+    message: "Invalid Stellar address",
+  })
+  .openapi({ example: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF" });
 
 const isoDateTimeSchema = z
   .string()
@@ -500,7 +513,14 @@ export const summaryQuerySchema = z.object({
 }).passthrough();
 
 export const txHashParamsSchema = z.object({
-  txHash: queryString("Transaction hash"),
+  txHash: z.preprocess(
+    firstValue,
+    z
+      .string()
+      .trim()
+      .regex(/^[0-9a-fA-F]{64}$/, "Invalid transaction hash: Must be 64 hex characters")
+      .openapi({ description: "Transaction hash" })
+  ),
 }).passthrough();
 
 export const hostFnQuerySchema = z.object({
@@ -634,7 +654,14 @@ export const tokensResponseSchema = z.object({
  */
 export const transferExportQuerySchema = z.object({
   ...withNetwork,
-  address: stellarAddressSchema.optional(),
+  address: z.preprocess(
+    (value) => {
+      const raw = firstValue(value);
+      if (raw === undefined || raw === null || raw === "") return undefined;
+      return raw;
+    },
+    stellarAddressSchema.optional()
+  ),
   contractId: optionalQueryString("Token contract ID to filter by"),
   token: contractAddressSchema.optional(),
   fromLedger: optionalQueryInt({ min: 0 }),

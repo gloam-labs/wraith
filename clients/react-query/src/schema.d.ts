@@ -646,13 +646,13 @@ export interface paths {
                             nextCursor?: string | null;
                             transfers: {
                                 id: number;
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 /** @enum {string} */
                                 eventType: "transfer" | "mint" | "burn" | "clawback";
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 fromAddress: string | null;
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 toAddress: string | null;
                                 amount: string;
                                 displayAmount: string;
@@ -771,13 +771,13 @@ export interface paths {
                             nextCursor?: string | null;
                             transfers: {
                                 id: number;
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 /** @enum {string} */
                                 eventType: "transfer" | "mint" | "burn" | "clawback";
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 fromAddress: string | null;
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 toAddress: string | null;
                                 amount: string;
                                 displayAmount: string;
@@ -896,13 +896,13 @@ export interface paths {
                             nextCursor?: string | null;
                             transfers: {
                                 id: number;
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 /** @enum {string} */
                                 eventType: "transfer" | "mint" | "burn" | "clawback";
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 fromAddress: string | null;
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 toAddress: string | null;
                                 amount: string;
                                 displayAmount: string;
@@ -1076,13 +1076,13 @@ export interface paths {
                         "application/json": {
                             transfers: {
                                 id: number;
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 /** @enum {string} */
                                 eventType: "transfer" | "mint" | "burn" | "clawback";
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 fromAddress: string | null;
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 toAddress: string | null;
                                 amount: string;
                                 displayAmount: string;
@@ -1175,7 +1175,7 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                            /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                             address: string;
                             window: {
                                 /**
@@ -1190,7 +1190,7 @@ export interface paths {
                                 toDate: string | null;
                             };
                             tokens: {
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 totalReceived: string;
                                 totalSent: string;
@@ -1281,7 +1281,7 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                            /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                             address: string;
                             window: {
                                 /**
@@ -1296,7 +1296,7 @@ export interface paths {
                                 toDate: string | null;
                             };
                             tokens: {
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 totalReceived: string;
                                 totalSent: string;
@@ -1381,12 +1381,12 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                            /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                             address: string;
                             /** @enum {string} */
                             network: "testnet" | "mainnet";
                             balances: {
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 balance: string;
                                 displayBalance: string;
@@ -1501,13 +1501,13 @@ export interface paths {
                             nextCursor?: string | null;
                             transfers: {
                                 id: number;
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 /** @enum {string} */
                                 eventType: "transfer" | "mint" | "burn" | "clawback";
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 fromAddress: string | null;
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 toAddress: string | null;
                                 amount: string;
                                 displayAmount: string;
@@ -1944,13 +1944,13 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                            /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                             contractId: string;
                             total: number;
                             limit: number;
                             offset: number;
                             logs: {
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 functionName: string;
                                 args?: unknown;
@@ -2064,12 +2064,12 @@ export interface paths {
                             nextCursor?: string | null;
                             transfers: {
                                 id: number;
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 tokenId: string;
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 fromAddress: string | null;
-                                /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                                /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                                 toAddress: string | null;
                                 ledger: number;
                                 /** Format: date-time */
@@ -2152,10 +2152,10 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                            /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                             contract: string;
                             token_id: string;
-                            /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
+                            /** @example GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF */
                             owner: string;
                             metadata: {
                                 name: string | null;
@@ -2248,7 +2248,7 @@ export interface paths {
                             offset: number;
                             total: number;
                             assets: {
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 transferCount: number;
                                 volume: string;
@@ -2420,7 +2420,7 @@ export interface paths {
                             tokens: {
                                 /** @enum {string} */
                                 network: "testnet" | "mainnet";
-                                /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
+                                /** @example CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM */
                                 contractId: string;
                                 symbol: string;
                                 name: string;
@@ -2688,7 +2688,7 @@ export interface paths {
                 query?: {
                     /** @description Network to read from. Defaults to the deployment's configured network. May also be sent as the X-Network header; the query parameter wins. */
                     network?: "testnet" | "mainnet" | null;
-                    address?: string;
+                    address?: string | null;
                     /** @description Token contract ID to filter by */
                     contractId?: string | null;
                     token?: string;
@@ -2776,7 +2776,7 @@ export interface paths {
                 query?: {
                     /** @description Network to read from. Defaults to the deployment's configured network. May also be sent as the X-Network header; the query parameter wins. */
                     network?: "testnet" | "mainnet" | null;
-                    address?: string;
+                    address?: string | null;
                     /** @description Token contract ID to filter by */
                     contractId?: string | null;
                     token?: string;

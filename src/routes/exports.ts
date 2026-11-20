@@ -9,6 +9,7 @@ import { finished } from "stream/promises";
 import { z } from "zod";
 import { requestNetwork } from "../middleware/network";
 import { parseOr400 } from "../openapi/validation";
+import { stellarAddressSchema } from "../openapi/schemas";
 import type { Network } from "../network";
 import { getCachedTokenDecimals } from "../tokenCache";
 
@@ -37,7 +38,14 @@ const DEFAULT_MAX_ROWS = Math.min(
 // ── Query-param schema ────────────────────────────────────────────────────────
 // Exported so the OpenAPI build can reference it.
 export const exportQuerySchema = z.object({
-  address:    z.string().trim().optional(),
+  address:    z.preprocess(
+                (value) => {
+                  const raw = Array.isArray(value) ? value[0] : value;
+                  if (raw === undefined || raw === null || raw === "") return undefined;
+                  return raw;
+                },
+                stellarAddressSchema.optional()
+              ),
   contractId: z.string().trim().optional(),
   fromLedger: z.coerce.number().int().min(0).optional(),
   toLedger:   z.coerce.number().int().min(0).optional(),

@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import express from "express";
 import { buildOpenApiDocument } from "../openapi/build";
+import { contractAddressSchema, stellarAddressSchema, isValidStellarAddress } from "../openapi/schemas";
 
 /**
  * Record every `use(path, router)` mount before the app and its route modules
@@ -271,5 +272,61 @@ describe("OpenAPI route coverage (W085)", () => {
     const generated = JSON.stringify(spec, null, 2) + "\n";
 
     expect(committed).toBe(generated);
+  });
+
+  it("each example in the spec passes its own schema", () => {
+    let exampleCount = 0;
+
+    function validateNode(node: unknown, nodePath = ""): void {
+      if (!node || typeof node !== "object") return;
+      const obj = node as Record<string, unknown>;
+
+      if ("example" in obj) {
+        exampleCount++;
+        const ex = obj.example;
+
+        if (obj.type === "string") {
+          expect(typeof ex).toBe("string");
+          if (typeof obj.pattern === "string") {
+            const re = new RegExp(obj.pattern);
+            expect(re.test(ex as string)).toBe(true);
+          }
+          if (typeof obj.minLength === "number") {
+            expect((ex as string).length).toBeGreaterThanOrEqual(obj.minLength);
+          }
+          if (typeof obj.maxLength === "number") {
+            expect((ex as string).length).toBeLessThanOrEqual(obj.maxLength);
+          }
+          if (Array.isArray(obj.enum)) {
+            expect(obj.enum).toContain(ex);
+          }
+        }
+      }
+
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === "object" && v !== null) {
+          validateNode(v, nodePath ? `${nodePath}.${k}` : k);
+        }
+      }
+    }
+
+    validateNode(spec);
+    expect(exampleCount).toBeGreaterThan(0);
+
+    // Verify that the Stellar address and contract examples pass their respective schemas
+    const pathItem = spec.paths["/transfers/incoming/{address}"];
+    const addressParam = (pathItem?.get as { parameters?: Array<{ name: string; schema: { example: string } }> })
+      ?.parameters?.find((p) => p.name === "address");
+    expect(addressParam).toBeDefined();
+    expect(typeof addressParam?.schema.example).toBe("string");
+    expect(stellarAddressSchema.safeParse(addressParam?.schema.example).success).toBe(true);
+    expect(isValidStellarAddress(addressParam!.schema.example)).toBe(true);
+
+    const tokenParam = (pathItem?.get as { parameters?: Array<{ name: string; schema: { example: string } }> })
+      ?.parameters?.find((p) => p.name === "token");
+    expect(tokenParam).toBeDefined();
+    expect(typeof tokenParam?.schema.example).toBe("string");
+    expect(contractAddressSchema.safeParse(tokenParam?.schema.example).success).toBe(true);
+    expect(isValidStellarAddress(tokenParam!.schema.example)).toBe(true);
   });
 });

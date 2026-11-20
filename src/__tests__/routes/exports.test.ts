@@ -100,6 +100,13 @@ describe("GET /transfers.csv", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects an invalid address with 400", async () => {
+    const res = await request(createApp()).get("/transfers.csv?address=invalid-address");
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid Stellar address");
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+
   it("rejects maxRows above the absolute ceiling", async () => {
     const res = await request(createApp()).get("/transfers.csv?maxRows=999999999");
     expect(res.status).toBe(400);
