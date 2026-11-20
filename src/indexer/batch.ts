@@ -83,11 +83,10 @@ export async function processEventBatch(
   );
   const inserted = await upsertTransfers(records, net);
 
-  // Resolve metadata for every distinct token in this batch. Only a cache miss
-  // reaches RPC, and a miss happens once per contract for the life of the
-  // database — so this is one extra call the first time a token is seen and
-  // free thereafter. Best-effort: a token whose metadata cannot be read is
-  // still worth indexing transfers for.
+  // Resolve metadata for every distinct token in this batch. Successful
+  // lookups are cached; failures are temporarily suppressed with in-memory
+  // negative caching, and concurrent lookups for the same token are deduplicated.
+  // Best-effort: a token whose metadata cannot be read is still worth indexing.
   await Promise.all(
     [...new Set(records.map((r) => r.contractId))].map((contractId) =>
       getTokenMetadata(contractId, net).catch(() => undefined)

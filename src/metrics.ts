@@ -253,6 +253,20 @@ export const transfersStoredTotal = new Counter({
   registers: [registry],
 });
 
+/** Outcomes for token metadata cache and RPC lookups; labels are fixed and bounded. */
+export type TokenMetadataLookupOutcome =
+  | "hit"
+  | "miss"
+  | "failed"
+  | "skipped_recent_failure";
+
+export const tokenMetadataLookupsTotal = new Counter({
+  name: "token_metadata_lookups_total",
+  help: "Token metadata lookup outcomes",
+  labelNames: ["outcome"] as const,
+  registers: [registry],
+});
+
 /**
  * Failed RPC attempts, counted per attempt rather than per call.
  *
