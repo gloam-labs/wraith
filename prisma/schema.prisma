@@ -664,11 +664,23 @@ model DiscordMember {
   // When the spending account first acted. Looked up once; it cannot change.
   firstSeenAt  DateTime?
 
+  // The last check *attempt*, successful or not, so a member whose check
+  // throws goes to the back of the queue instead of the front. `checkedAt`
+  // stays "when the facts were last read successfully"; the recheck job
+  // orders by this one.
+  lastAttemptAt DateTime?
+  // Checks in a row that threw, and in a row that found the member gone. Each
+  // buys a longer wait before the next attempt (see `recheckDelayMs`), so a
+  // member who keeps failing or has left cannot occupy every run.
+  failedAttempts Int @default(0)
+  absentChecks   Int @default(0)
+
   checkedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // The daily job walks members oldest-checked first.
+  // The recheck job walks members oldest-attempted first.
+  @@index([lastAttemptAt])
   @@index([checkedAt])
   @@schema("wraith")
 }

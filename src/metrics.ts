@@ -512,6 +512,57 @@ export const feeQuoteRecordFailuresTotal = new Counter({
   registers: [registry],
 });
 
+/**
+ * Discord role checks, by outcome.
+ *
+ * The bot re-checks every linked member so a role stops counting when the thing
+ * behind it is gone. That work was previously visible only as two log lines, so
+ * "the check is running" and "the check is drowning" looked the same.
+ *
+ * `outcome` is one of three words:
+ *
+ *  - `checked` — the member was checked and the result was applied.
+ *  - `failed` — the check threw (Discord answered with an error, a role could
+ *    not be removed, the chain timed out). The member's roles are left alone and
+ *    their next check is pushed further out.
+ *  - `skipped` — the member was due but the batch had no room for them. A
+ *    sustained non-zero rate here is why "a day" takes longer than a day.
+ *
+ * Never a Discord user id: that would be one series per member.
+ */
+export const discordMemberChecksTotal = new Counter({
+  name: "discord_member_checks_total",
+  help: "Discord member role checks, by outcome",
+  labelNames: ["outcome"] as const,
+  registers: [registry],
+});
+
+/**
+ * How long the oldest member has been waiting for a Discord role check.
+ *
+ * A gauge, not a counter: it is a backlog, and what matters is whether it keeps
+ * growing past the recheck interval. Anything near `DISCORD_RECHECK_INTERVAL_MS`
+ * means the bot is not keeping up with the members it has.
+ */
+export const discordOldestUncheckedAgeSeconds = new Gauge({
+  name: "discord_oldest_unchecked_age_seconds",
+  help: "Age in seconds of the oldest member due for a Discord role check",
+  registers: [registry],
+});
+
+/** Record Discord role checks under a fixed outcome word. */
+export function recordDiscordChecks(outcome: "checked" | "failed" | "skipped", count = 1): void {
+  // Zero is recorded on purpose: prom-client only exports a labelled counter
+  // once that label combination has been touched, and a dashboard needs the
+  // series to exist at zero to show "no failures" rather than "no data".
+  discordMemberChecksTotal.inc({ outcome }, count);
+}
+
+/** Set the age of the oldest member still waiting for a check. */
+export function setDiscordOldestUncheckedAge(seconds: number): void {
+  discordOldestUncheckedAgeSeconds.set(Math.max(0, seconds));
+}
+
 /** Serialize the registry in Prometheus text exposition format. */
 export function renderMetrics(): Promise<string> {
   return registry.metrics();
