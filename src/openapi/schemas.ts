@@ -289,6 +289,36 @@ export const summaryResponseSchema = z.object({
   tokens: z.array(tokenSummarySchema),
 });
 
+/**
+ * An amount a person reads, in major units, signed.
+ *
+ * A minus sign is how a negative reads — `displayNetFlow` and every
+ * `displayAmount` already do it this way, and a field whose sign is a word in
+ * the string ("5.0000000 (negative)") is a field no client can format without
+ * special-casing it.
+ */
+const signedDisplayAmountSchema = z
+  .string()
+  .regex(/^-?\d+(\.\d+)?$/, "display amounts are a plain signed decimal, with no words in them");
+
+/** One asset the address has ever touched, as the account summary serves it. */
+export const accountAssetSummarySchema = z.object({
+  contractId: contractAddressSchema,
+  totalSent: z.string(),
+  totalReceived: z.string(),
+  net: z.string(),
+  displayTotalSent: signedDisplayAmountSchema,
+  displayTotalReceived: signedDisplayAmountSchema,
+  displayNet: signedDisplayAmountSchema,
+  txCount: z.number().int(),
+  lastActivityAt: isoDateTimeSchema,
+});
+
+export const accountSummaryResponseSchema = z.object({
+  address: stellarAddressSchema,
+  assets: z.array(accountAssetSummarySchema),
+});
+
 export const webhookFilterSchema = z
   .object({
     contract: z.string().optional(),
@@ -498,6 +528,22 @@ export const summaryQuerySchema = z.object({
   fromDate: optionalQueryDateTime("Inclusive lower bound on ledgerClosedAt"),
   toDate: optionalQueryDateTime("Inclusive upper bound on ledgerClosedAt"),
 }).passthrough();
+
+/**
+ * What `GET /accounts/{address}/summary` takes, and takes strictly.
+ *
+ * Narrower than {@link summaryQuerySchema} on purpose. That route computes over
+ * the transfer rows and can honour a date window; this one reads the
+ * materialised `AccountSummary` rollup, which holds one all-time row per asset
+ * and has no window to filter. Accepting `fromDate` and quietly returning
+ * all-time totals was the failure this replaces: a caller who asked for a
+ * month got everything and had no way to know.
+ */
+export const accountSummaryQuerySchema = z.object({
+  ...withNetwork,
+  address: stellarAddressSchema,
+  contractId: optionalQueryString("Token contract ID to filter by"),
+}).strict();
 
 export const txHashParamsSchema = z.object({
   txHash: queryString("Transaction hash"),

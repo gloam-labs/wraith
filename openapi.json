@@ -2556,7 +2556,8 @@
     },
     "/accounts/{address}/summary": {
       "get": {
-        "summary": "Token summary",
+        "summary": "Per-asset account summary",
+        "description": "One all-time row per asset the address has ever sent or received, read from a materialised rollup. It is not the same answer as GET /summary/{address}, which computes over transfer rows and takes a date window: this route has no window to filter, so it refuses fromDate and toDate instead of returning all-time totals for a request that asked for a month.",
         "parameters": [
           {
             "schema": {
@@ -2595,30 +2596,6 @@
             "description": "Token contract ID to filter by",
             "name": "contractId",
             "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "nullable": true,
-              "format": "date-time",
-              "description": "Inclusive lower bound on ledgerClosedAt"
-            },
-            "required": false,
-            "description": "Inclusive lower bound on ledgerClosedAt",
-            "name": "fromDate",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "nullable": true,
-              "format": "date-time",
-              "description": "Inclusive upper bound on ledgerClosedAt"
-            },
-            "required": false,
-            "description": "Inclusive upper bound on ledgerClosedAt",
-            "name": "toDate",
-            "in": "query"
           }
         ],
         "responses": {
@@ -2634,28 +2611,7 @@
                       "minLength": 1,
                       "example": "GABCDEFGHIJKLMNOPQRSTUVWXYZ"
                     },
-                    "window": {
-                      "type": "object",
-                      "properties": {
-                        "fromDate": {
-                          "type": "string",
-                          "nullable": true,
-                          "format": "date-time",
-                          "example": "2025-01-01T00:00:00Z"
-                        },
-                        "toDate": {
-                          "type": "string",
-                          "nullable": true,
-                          "format": "date-time",
-                          "example": "2025-01-01T00:00:00Z"
-                        }
-                      },
-                      "required": [
-                        "fromDate",
-                        "toDate"
-                      ]
-                    },
-                    "tokens": {
+                    "assets": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -2665,45 +2621,53 @@
                             "pattern": "^C[A-Z2-7]{55}$",
                             "example": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B"
                           },
-                          "totalReceived": {
-                            "type": "string"
-                          },
                           "totalSent": {
                             "type": "string"
                           },
-                          "netFlow": {
+                          "totalReceived": {
                             "type": "string"
                           },
-                          "displayTotalReceived": {
+                          "net": {
                             "type": "string"
                           },
                           "displayTotalSent": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^-?\\d+(\\.\\d+)?$"
                           },
-                          "displayNetFlow": {
-                            "type": "string"
+                          "displayTotalReceived": {
+                            "type": "string",
+                            "pattern": "^-?\\d+(\\.\\d+)?$"
+                          },
+                          "displayNet": {
+                            "type": "string",
+                            "pattern": "^-?\\d+(\\.\\d+)?$"
                           },
                           "txCount": {
                             "type": "integer"
+                          },
+                          "lastActivityAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2025-01-01T00:00:00Z"
                           }
                         },
                         "required": [
                           "contractId",
-                          "totalReceived",
                           "totalSent",
-                          "netFlow",
-                          "displayTotalReceived",
+                          "totalReceived",
+                          "net",
                           "displayTotalSent",
-                          "displayNetFlow",
-                          "txCount"
+                          "displayTotalReceived",
+                          "displayNet",
+                          "txCount",
+                          "lastActivityAt"
                         ]
                       }
                     }
                   },
                   "required": [
                     "address",
-                    "window",
-                    "tokens"
+                    "assets"
                   ]
                 }
               }

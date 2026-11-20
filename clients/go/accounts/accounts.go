@@ -18,7 +18,9 @@ type Client struct {
 func New(c *wraith.Client) *Client { return &Client{c: c} }
 
 // AssetHolding is one row of an account's per-asset summary. Amounts are kept
-// as strings to preserve full i128 precision.
+// as strings to preserve full i128 precision. The Display fields are the same
+// amounts in major units as a plain signed decimal: a net outflow reads
+// "-12.5000000", with the sign in the number and nowhere else.
 type AssetHolding struct {
 	ContractID           string  `json:"contractId"`
 	TotalSent            string  `json:"totalSent"`

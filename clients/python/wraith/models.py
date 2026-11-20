@@ -77,7 +77,12 @@ class TransferPage:
 
 @dataclass
 class AssetHolding:
-    """One row of an account's per-asset summary."""
+    """One row of an account's per-asset summary.
+
+    The ``display_*`` fields are the same amounts in major units, as a plain
+    signed decimal: a net outflow reads ``"-12.5000000"``, with the sign in the
+    number and nowhere else.
+    """
 
     contract_id: str
     total_sent: str

@@ -3,6 +3,8 @@ import path from "path";
 import { OpenAPIRegistry, OpenApiGeneratorV3 } from "@asteasolutions/zod-to-openapi";
 import { getOhlcRefreshIntervalMs } from "../ohlcConfig";
 import {
+  accountSummaryQuerySchema,
+  accountSummaryResponseSchema,
   addressPathSchema,
   booleanOkResponseSchema,
   candlesParamsSchema,
@@ -84,6 +86,7 @@ const commonErrorResponses = {
 
 const transferQueryOnlySchema = transferQuerySchema.omit({ address: true });
 const summaryQueryOnlySchema = summaryQuerySchema.omit({ address: true });
+const accountSummaryQueryOnlySchema = accountSummaryQuerySchema.omit({ address: true });
 
 const transferListResponses = {
   200: { description: "OK", content: { "application/json": { schema: transferListResponseSchema } } },
@@ -265,13 +268,19 @@ registry.registerPath({
 registry.registerPath({
   method: "get",
   path: "/accounts/{address}/summary",
-  summary: "Token summary",
+  summary: "Per-asset account summary",
+  description:
+    "One all-time row per asset the address has ever sent or received, read from a " +
+    "materialised rollup. It is not the same answer as GET /summary/{address}, which " +
+    "computes over transfer rows and takes a date window: this route has no window to " +
+    "filter, so it refuses fromDate and toDate instead of returning all-time totals for " +
+    "a request that asked for a month.",
   request: {
     params: addressPathSchema,
-    query: summaryQueryOnlySchema,
+    query: accountSummaryQueryOnlySchema,
   },
   responses: {
-    200: { description: "OK", content: { "application/json": { schema: summaryResponseSchema } } },
+    200: { description: "OK", content: { "application/json": { schema: accountSummaryResponseSchema } } },
     ...commonErrorResponses,
   },
 });

@@ -57,7 +57,7 @@ function Transfers({ address }: { address: string }) {
 
 ## Hooks
 
-Every list endpoint of the API has a hook:
+One hook per read endpoint this client covers:
 
 | Resource  | Hook                                                                            | Endpoint                          |
 | --------- | ------------------------------------------------------------------------------ | --------------------------------- |
@@ -82,6 +82,35 @@ invalidate or prefetch:
 ```ts
 queryClient.invalidateQueries({ queryKey: queryKeys.transfers.all });
 ```
+
+## Coverage
+
+What this client reaches today, against the whole API. `✅` the group in full,
+`◐` part of it, `—` none of it.
+
+| Group                | react-query | Gap                                                      |
+| -------------------- | :---------: | -------------------------------------------------------- |
+| Transfers            | ✅          |                                                           |
+| Accounts             | ◐           | no `GET /accounts/{address}/balance`           |
+| Windowed summary     | —           | no `GET /summary/{address}`                    |
+| Assets               | ✅          |                                                           |
+| NFTs                 | ◐           | no `GET /nfts/owners/{contract}/{token_id}` |
+| Status               | ✅          |                                                           |
+| Token directory      | —           | no `GET /tokens`                             |
+| Host-fn logs         | ✅          | the only client with this                                |
+| Webhooks             | ◐           | `useWebhooks`, `useWebhookDeliveries` — no subscribe, no delete |
+| Search, candles, fees, offramp, NGN rails | — | #308                                |
+| Exports, ops, liveness, bot and provider callbacks, GraphQL | — | deliberate |
+
+The full table — every client, and why each gap is open or deliberate — is
+[docs/client-coverage.md](../../docs/client-coverage.md). Change this row and
+that row in the same PR.
+
+Two caveats that are not about which routes exist. Nothing here issues a `POST`,
+so the client is read-only by construction. And the only way to pick a network
+today is an `X-Network` header on the client, which no cache key includes — one
+`QueryClient` pointed at both chains serves one chain's answer for the other
+(#413; `useAccountSummary` and `useStatus` take no `query` argument either).
 
 ## Regenerating
 

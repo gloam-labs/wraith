@@ -121,6 +121,8 @@
 import type { RequestHandler, Response } from "express";
 import cors from "cors";
 
+import { REQUEST_ID_HEADER } from "./requestId";
+
 /**
  * What a browser is allowed to do on one surface.
  *
@@ -282,9 +284,15 @@ export function createCorsMiddleware(env: NodeJS.ProcessEnv = process.env): Requ
   const allowedOrigins = allowedOriginsFromEnv(env);
 
   // Any origin, and the origin is not reflected: the public read API.
-  const openCors = cors({ origin: "*" });
+  //
+  // Both browser-facing policies expose the request id. Without
+  // `Access-Control-Expose-Headers` a page can receive `x-request-id` but
+  // cannot read it, and the id is only useful to a caller who can quote it
+  // when something fails. The `server` surface below stays without CORS headers
+  // of any kind, so a browser still cannot read a provider callback.
+  const openCors = cors({ origin: "*", exposedHeaders: [REQUEST_ID_HEADER] });
   // Reflect the origin. Only reached after the allow-list has said yes.
-  const reflectCors = cors({ origin: true });
+  const reflectCors = cors({ origin: true, exposedHeaders: [REQUEST_ID_HEADER] });
 
   return function corsMiddleware(req, res, next) {
     const { surface, policy } = corsPolicyFor(req.path, req.method);

@@ -1253,7 +1253,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Token summary */
+        /**
+         * Per-asset account summary
+         * @description One all-time row per asset the address has ever sent or received, read from a materialised rollup. It is not the same answer as GET /summary/{address}, which computes over transfer rows and takes a date window: this route has no window to filter, so it refuses fromDate and toDate instead of returning all-time totals for a request that asked for a month.
+         */
         get: {
             parameters: {
                 query?: {
@@ -1261,10 +1264,6 @@ export interface paths {
                     network?: "testnet" | "mainnet" | null;
                     /** @description Token contract ID to filter by */
                     contractId?: string | null;
-                    /** @description Inclusive lower bound on ledgerClosedAt */
-                    fromDate?: string | null;
-                    /** @description Inclusive upper bound on ledgerClosedAt */
-                    toDate?: string | null;
                 };
                 header?: never;
                 path: {
@@ -1283,28 +1282,21 @@ export interface paths {
                         "application/json": {
                             /** @example GABCDEFGHIJKLMNOPQRSTUVWXYZ */
                             address: string;
-                            window: {
-                                /**
-                                 * Format: date-time
-                                 * @example 2025-01-01T00:00:00Z
-                                 */
-                                fromDate: string | null;
-                                /**
-                                 * Format: date-time
-                                 * @example 2025-01-01T00:00:00Z
-                                 */
-                                toDate: string | null;
-                            };
-                            tokens: {
+                            assets: {
                                 /** @example CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B */
                                 contractId: string;
-                                totalReceived: string;
                                 totalSent: string;
-                                netFlow: string;
-                                displayTotalReceived: string;
+                                totalReceived: string;
+                                net: string;
                                 displayTotalSent: string;
-                                displayNetFlow: string;
+                                displayTotalReceived: string;
+                                displayNet: string;
                                 txCount: number;
+                                /**
+                                 * Format: date-time
+                                 * @example 2025-01-01T00:00:00Z
+                                 */
+                                lastActivityAt: string;
                             }[];
                         };
                     };

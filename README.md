@@ -210,6 +210,7 @@ npm run db:seed
 A complete, production-grade OpenAPI 3.0 specification is generated from the shared Zod schemas used by the API handlers.
 
 - **[openapi.json](./docs/openapi.json)**
+- **[Client coverage](./docs/client-coverage.md)** — which of the Go, react-query and Python clients reaches which route group, and which gaps are deliberate
 
 You can use this file to explore the API, generate client SDKs, or import it into tools like:
 
