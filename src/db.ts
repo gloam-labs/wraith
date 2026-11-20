@@ -323,11 +323,91 @@ export async function clearBackfillCursor(network?: Network): Promise<void> {
 }
 
 // ─── Data retention ─────────────────────────────────────────────────────────
-const RETENTION_DAYS = parseInt(process.env.RETENTION_DAYS ?? "30", 10);
+export const DEFAULT_RETENTION_DAYS = 30;
+const MAX_RETENTION_DAYS = 3650;
+
+let warnedRetentionValue: string | undefined;
 
 /**
- * Delete indexed events older than RETENTION_DAYS to keep the DB within
- * free-tier limits. Returns the number of rows deleted across all tables.
+ * Read `RETENTION_DAYS`, falling back to the default for anything that is not a
+ * whole number of days between 1 and 3650.
+ *
+ * A bare `parseInt` let `RETENTION_DAYS=abc` through as NaN, which made an
+ * invalid cut-off date, which made every delete throw, which meant nothing was
+ * ever pruned: the 2026-10-27 outage reached by a typo. `0` and negative values
+ * are rejected as well, since they would put the cut-off at or after now and
+ * delete everything. A bad value warns once per distinct value, not per run.
+ */
+export function resolveRetentionDays(raw: string | undefined = process.env.RETENTION_DAYS): number {
+  if (raw === undefined || raw.trim() === "") return DEFAULT_RETENTION_DAYS;
+  const trimmed = raw.trim();
+  const days = /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
+  if (Number.isSafeInteger(days) && days >= 1 && days <= MAX_RETENTION_DAYS) return days;
+
+  if (warnedRetentionValue !== trimmed) {
+    warnedRetentionValue = trimmed;
+    console.warn(
+      `[prune] Ignoring invalid RETENTION_DAYS (expected a whole number from 1 to ${MAX_RETENTION_DAYS}); using ${DEFAULT_RETENTION_DAYS}`
+    );
+  }
+  return DEFAULT_RETENTION_DAYS;
+}
+
+/** Test-only: forget which bad `RETENTION_DAYS` value has already warned. */
+export function _resetRetentionWarning(): void {
+  warnedRetentionValue = undefined;
+}
+
+type PrunableDelegate = {
+  findMany(args: {
+    where: Record<string, unknown>;
+    select: { id: true };
+    orderBy: { id: "asc" };
+    take: number;
+  }): Promise<Array<{ id: number }>>;
+  deleteMany(args: { where: Record<string, unknown> }): Promise<{ count: number }>;
+};
+
+/**
+ * Every table the indexer writes to, in one place. See {@link pruneNetwork} for
+ * why this is spelled out rather than derived: **a new table the indexer writes
+ * to must be added here.** `rollbackToLedger` enumerates the same four, and the
+ * two lists are meant to agree.
+ */
+export const PRUNE_TABLES: ReadonlyArray<{ label: string; delegate: () => PrunableDelegate }> = [
+  { label: "transfers", delegate: () => prisma.tokenTransfer as unknown as PrunableDelegate },
+  { label: "nftTransfers", delegate: () => prisma.nftTransfer as unknown as PrunableDelegate },
+  { label: "hostFnLogs", delegate: () => prisma.hostFnLog as unknown as PrunableDelegate },
+  { label: "lpShareTransfers", delegate: () => prisma.lpShareTransfer as unknown as PrunableDelegate },
+];
+
+export interface PruneOptions {
+  /** Rows per DELETE statement. */
+  batchSize?: number;
+  /** Pause between batches, so a run never monopolises the database. */
+  pauseMs?: number;
+  /** Stop starting new batches after this long; the next run continues. */
+  budgetMs?: number;
+  now?: Date;
+}
+
+export interface PruneResult {
+  network: Network;
+  deleted: Record<string, number>;
+  total: number;
+  /** False when the time budget ran out before every table was drained. */
+  complete: boolean;
+}
+
+export const PRUNE_BATCH_SIZE = 5_000;
+export const PRUNE_BATCH_PAUSE_MS = 100;
+export const PRUNE_RUN_BUDGET_MS = 60_000;
+
+const sleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Delete indexed events older than the retention window for ONE network, in
+ * bounded batches. Throws on a database error; callers decide what that means.
  *
  * **Every indexed table, not just transfers.** This pruned `TokenTransfer`
  * alone for a long time while the indexer wrote to four tables, and on
@@ -339,30 +419,58 @@ const RETENTION_DAYS = parseInt(process.env.RETENTION_DAYS ?? "30", 10);
  * by hand.
  *
  * So the rule, and the reason the list is spelled out rather than defaulted:
- * **a new table the indexer writes to must be added here.** `rollbackToLedger`
- * already enumerates the same four, and the two lists are meant to agree.
+ * a new table the indexer writes to must be added to {@link PRUNE_TABLES}.
+ *
+ * **Batched.** `deleteMany` has no LIMIT, so each batch first selects up to
+ * `batchSize` ids (scoped by network and age) and deletes exactly those, with
+ * the network and age predicate repeated on the delete. One statement therefore
+ * never touches more than a batch, and a stale id can never reach another
+ * network's rows.
  *
  * Scoped to one network, like every other bulk delete here: pruning testnet
  * must never delete mainnet history, which is the more expensive of the two to
  * re-index.
  */
-export async function pruneOldTransfers(network?: Network): Promise<number> {
+export async function pruneNetwork(
+  network?: Network,
+  options: PruneOptions = {}
+): Promise<PruneResult> {
   const net = resolveNetwork(network);
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+  const batchSize = Math.max(1, Math.floor(options.batchSize ?? PRUNE_BATCH_SIZE));
+  const pauseMs = options.pauseMs ?? PRUNE_BATCH_PAUSE_MS;
+  const budgetMs = options.budgetMs ?? PRUNE_RUN_BUDGET_MS;
+  const retentionDays = resolveRetentionDays();
+  const cutoff = new Date((options.now ?? new Date()).getTime() - retentionDays * 86_400_000);
   const where = { network: net, ledgerClosedAt: { lt: cutoff } };
+  const startedAt = Date.now();
 
-  // Separate statements rather than one transaction: these are independent
-  // deletes of millions of rows, and holding them open together is what makes a
-  // prune block the indexer that scheduled it.
   const deleted: Record<string, number> = {};
-  for (const [label, run] of [
-    ["transfers", () => prisma.tokenTransfer.deleteMany({ where })],
-    ["nftTransfers", () => prisma.nftTransfer.deleteMany({ where })],
-    ["hostFnLogs", () => prisma.hostFnLog.deleteMany({ where })],
-    ["lpShareTransfers", () => prisma.lpShareTransfer.deleteMany({ where })],
-  ] as const) {
-    deleted[label] = (await run()).count;
+  let complete = true;
+
+  tables: for (const { label, delegate } of PRUNE_TABLES) {
+    deleted[label] = 0;
+    const table = delegate();
+    for (;;) {
+      if (Date.now() - startedAt >= budgetMs) {
+        complete = false;
+        break tables;
+      }
+      const rows = await table.findMany({
+        where,
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: batchSize,
+      });
+      if (rows.length === 0) break;
+
+      const { count } = await table.deleteMany({
+        where: { ...where, id: { in: rows.map((row) => row.id) } },
+      });
+      deleted[label] += count;
+
+      if (rows.length < batchSize) break;
+      if (pauseMs > 0) await sleepMs(pauseMs);
+    }
   }
 
   const total = Object.values(deleted).reduce((sum, n) => sum + n, 0);
@@ -372,11 +480,19 @@ export async function pruneOldTransfers(network?: Network): Promise<number> {
       .map(([label, n]) => `${label}=${n}`)
       .join(" ");
     console.log(
-      `[prune] Deleted ${total} ${net} rows older than ${RETENTION_DAYS} days (before ${cutoff.toISOString()}): ${detail}`
+      `[prune] Deleted ${total} ${net} rows older than ${retentionDays} days (before ${cutoff.toISOString()}): ${detail}${complete ? "" : " (time budget reached, continuing next run)"}`
     );
   }
 
-  return total;
+  return { network: net, deleted, total, complete };
+}
+
+/** Prune one network and return only the row count. */
+export async function pruneOldTransfers(
+  network?: Network,
+  options?: PruneOptions
+): Promise<number> {
+  return (await pruneNetwork(network, options)).total;
 }
 
 // ─── Query helpers ─────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { attachWebSocketServer } from "./ws";
 import { attachGraphQLSubscriptions, SUBSCRIPTIONS_PATH } from "./graphql/subscriptions";
 import { startWebhookWorker } from "./workers/webhooks";
 import { startPartitionRetentionJob } from "./jobs/retention";
+import { startDataPruningJob } from "./jobs/dataPruning";
 import { startOrderReconciliationJob } from "./jobs/orderReconciliation";
 import { startDiscordRolesJob } from "./discord/sync";
 import { initTokenCache } from "./tokenCache";
@@ -276,6 +277,10 @@ async function main() {
 
   // The webhook is the fast path; this catches orders whose event never arrived.
   startOrderReconciliationJob();
+
+  // Retention pruning runs on its own timer for every enabled network, whether
+  // or not its indexer loop started and even when SKIP_INDEXER=true.
+  startDataPruningJob();
 
   // The Discord roles bot. A no-op unless DISCORD_* is configured, and nothing
   // it does is awaited here: a broken bot must not hold up the service.
