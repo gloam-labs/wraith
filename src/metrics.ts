@@ -20,6 +20,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from "prom-client";
 import type { Network } from "./network";
+import { endingsOf } from "./linq/providerStatus";
 
 export const registry = new Registry();
 
@@ -317,21 +318,6 @@ export type OrderTerminalStatus =
   | "timeout";
 
 /**
- * Segments that mean the order is still moving, whatever ending-word appears
- * beside them. Checked before the endings below because those are substring
- * matches: "refund_pending" contains "refund".
- */
-const STILL_MOVING_SEGMENTS = [
-  "pending",
-  "processing",
-  "awaiting",
-  "queued",
-  "initiated",
-  "progress",
-  "not",
-];
-
-/**
  * Map any provider or webhook status to a bounded terminal status, or null.
  *
  * Statuses arrive from several places and are not one vocabulary: a webhook
@@ -342,27 +328,30 @@ const STILL_MOVING_SEGMENTS = [
  * returns null and is not counted as terminal.
  */
 export function terminalStatusOf(status: string | null | undefined): OrderTerminalStatus | null {
-  if (!status) return null;
-  const s = status.toLowerCase();
-
   // Reading a pending status as an ending does more than inflate the counter:
   // the caller only records a transition when the previous status was not
   // terminal, so once "refund_pending" counts as refunded, the actual refund is
-  // never counted at all.
-  const segments = s.split(/[^a-z]+/).filter(Boolean);
-  if (segments.some((segment) => STILL_MOVING_SEGMENTS.includes(segment))) return null;
-
-  if (s.includes("completed")) return "completed";
-  if (s.includes("settled")) return "settled";
-  if (s.includes("disbursed")) return "disbursed";
-  if (s.includes("failed")) return "failed";
-  if (s.includes("expire")) return "expired";
-  if (s.includes("cancel")) return "cancelled";
-  if (s.includes("refund")) return "refunded";
-  if (s.includes("revers")) return "reversed";
-  if (s.includes("timeout")) return "timeout";
-  return null;
+  // never counted at all. `classifyProviderStatus` lets a still-moving word win.
+  const endings = endingsOf(status);
+  return TERMINAL_PRIORITY.find((terminal) => endings.includes(terminal)) ?? null;
 }
+
+/**
+ * Which ending labels a status that names more than one ("timeout: payout
+ * never completed" is labelled completed, as it always was). "rejected" is not
+ * a terminal label; the order's own ending word is.
+ */
+const TERMINAL_PRIORITY: readonly OrderTerminalStatus[] = [
+  "completed",
+  "settled",
+  "disbursed",
+  "failed",
+  "expired",
+  "cancelled",
+  "refunded",
+  "reversed",
+  "timeout",
+];
 
 /**
  * Orders created successfully, by rail.

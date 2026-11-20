@@ -521,6 +521,97 @@ describe("ordinary validation errors are not incidents", () => {
   });
 });
 
+// ─── A refund still in flight is not an ending (#418) ─────────────────────────
+
+describe("a pending refund", () => {
+  // Each of these contains an ending word ("refund", "cancel", "revers") and
+  // describes an order that is still moving. A substring match read them as
+  // endings: it wrote a MoneyFailure row and told wallet apps the order was
+  // finished.
+  const pending = [
+    "refund_pending",
+    "refund_processing",
+    "cancel_requested",
+    "reversal_pending",
+    "awaiting_refund",
+  ];
+
+  it.each(pending)("%s from a webhook writes no failure row", async (status) => {
+    const app = makeApp();
+    await placeOrder(app);
+    const orderId = tables.offrampOrder[0].orderId;
+
+    await deliver(app, { event: "order.processing", orderId, status });
+    await reconciled();
+
+    expect(tables.offrampOrder[0].status).toBe(status);
+    expect(tables.moneyFailure).toHaveLength(0);
+    const counted = await moneyFailuresTotal.get();
+    expect(counted.values.reduce((sum, v) => sum + v.value, 0)).toBe(0);
+  });
+
+  it.each(pending)("%s from a status poll writes no row and is not sent as finished", async (status) => {
+    const app = makeApp();
+    const placed = await placeOrder(app);
+    const orderId = tables.offrampOrder[0].orderId;
+    mockStatus.mockResolvedValue({
+      id: orderId,
+      status,
+      amountStableCoin: 50,
+      amountNGN: 75000,
+      currency: "NGN",
+      created: "2026-01-01T00:00:00.000Z",
+      updated: "2026-01-01T00:00:00.000Z",
+    });
+
+    const res = await request(app)
+      .get(`/offramp/orders/${placed.id}`)
+      .set("Authorization", `Bearer ${placed.accessToken}`);
+    expect(res.status).toBe(200);
+    // Exactly the provider's word: no "(failed)" or "(timeout)" for an
+    // installed app to read as the end of the order.
+    expect(res.body.status).toBe(status);
+    expect(res.body.providerStatus).toBe(status);
+    expect(tables.offrampOrder[0].status).toBe(status);
+    expect(tables.moneyFailure).toHaveLength(0);
+  });
+
+  it("an onramp refund_pending writes no failure row; the refund itself does", async () => {
+    await recordNgnOrder({
+      network: "testnet",
+      kind: "onramp",
+      orderId: "00000000-0000-4000-8000-0000000000c1",
+      customerRef: "ref_test_0002",
+      walletAddress: WALLET,
+      coin: "xlm",
+      amountStableCoin: 1,
+      amountNgn: 1500,
+      rate: 1500,
+      status: "processing",
+    });
+    const app = makeApp();
+
+    await deliver(app, {
+      event: "order.processing",
+      orderId: "00000000-0000-4000-8000-0000000000c1",
+      status: "refund_pending",
+    });
+    await reconciled();
+    expect(tables.ngnOrder[0].status).toBe("refund_pending");
+    expect(tables.moneyFailure).toHaveLength(0);
+
+    await deliver(app, {
+      event: "order.failed",
+      orderId: "00000000-0000-4000-8000-0000000000c1",
+      status: "refunded",
+    });
+    await reconciled();
+    expect(tables.moneyFailure).toHaveLength(1);
+    expect(tables.moneyFailure[0].kind).toBe("order_failed");
+    expect(tables.moneyFailure[0].rail).toBe("onramp");
+  });
+});
+
 // ─── GET /ops/failures — the operator surface ────────────────────────────────
 
 describe("GET /ops/failures", () => {
