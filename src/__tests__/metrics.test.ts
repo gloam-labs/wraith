@@ -277,6 +277,68 @@ describe("Prometheus metrics (#39)", () => {
       expect(res.text).toContain('http_requests_total{method="GET",route="/transfers/incoming/:address",status="200"} 1');
     });
 
+    it("labels sub-router endpoints with their full route pattern", async () => {
+      const origLinq = process.env.LINQ_API_KEY;
+      process.env.LINQ_API_KEY = "mock-key";
+      try {
+        const feesRes = await request(app).get("/fees");
+        const searchRes = await request(app).get("/search");
+        const offrampRes = await request(app).get("/offramp/rate");
+        const webhooksRes = await request(app).post("/webhooks").send({});
+
+        const res = await request(app).get("/metrics");
+
+        expect(res.text).toContain(`http_requests_total{method="GET",route="/fees",status="${feesRes.status}"} 1`);
+        expect(res.text).toContain(`http_requests_total{method="GET",route="/search",status="${searchRes.status}"} 1`);
+        expect(res.text).toContain(`http_requests_total{method="GET",route="/offramp/rate",status="${offrampRes.status}"} 1`);
+        expect(res.text).toContain(`http_requests_total{method="POST",route="/webhooks",status="${webhooksRes.status}"} 1`);
+      } finally {
+        if (origLinq === undefined) {
+          delete process.env.LINQ_API_KEY;
+        } else {
+          process.env.LINQ_API_KEY = origLinq;
+        }
+      }
+    });
+
+    it("never includes addresses or parameters in route labels and keeps route cardinality bounded", async () => {
+      const { queryAllTransfers } = jest.requireMock("../db");
+      queryAllTransfers.mockResolvedValue({ total: 0, transfers: [], nextCursor: null });
+
+      const addresses = [
+        "GA2C5RFPE6GCKMY3US5PAB6UZLKIGSPIUKSLRB6ZN7J3NQMG6UOPXVHT",
+        "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+        "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBR3WGCT3B",
+      ];
+
+      for (const addr of addresses) {
+        await request(app).get(`/accounts/${addr}/transfers`);
+      }
+
+      const res = await request(app).get("/metrics");
+
+      // Verify full pattern is used
+      expect(res.text).toContain('route="/accounts/:address/transfers"');
+
+      // Verify no address is present in any label
+      for (const addr of addresses) {
+        expect(res.text).not.toContain(addr);
+      }
+
+      // Assert that http_requests_total with route starting with /accounts has only 1 distinct route label value
+      const accountRoutes = res.text
+        .split("\n")
+        .filter((line) => line.startsWith("http_requests_total") && line.includes('route="/accounts/'))
+        .map((line) => {
+          const match = line.match(/route="([^"]+)"/);
+          return match ? match[1] : null;
+        });
+
+      const uniqueAccountRoutes = new Set(accountRoutes);
+      expect(uniqueAccountRoutes.size).toBe(1);
+      expect(uniqueAccountRoutes.has("/accounts/:address/transfers")).toBe(true);
+    });
+
     it("excludes /metrics from its own counters", async () => {
       // Reset and hit /metrics a few times
       _resetMetrics();
