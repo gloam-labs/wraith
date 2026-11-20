@@ -115,7 +115,7 @@ describe("decoder property-based tests (#73)", () => {
       fc.property(
         arbSymbolScVal.filter(scv => {
           try {
-            const native = (scv as xdr.ScVal).switch().name;
+            const native = (scv as xdr.ScVal).type;
             void native;
           } catch { return false; }
           return true;

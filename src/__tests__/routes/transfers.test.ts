@@ -65,6 +65,8 @@ function baseTransfer() {
     eventType: "transfer",
     fromAddress: BOB,
     toAddress: ALICE,
+    fromMuxedId: null,
+    toMuxedId: null,
     amount: "10000000000",        // 1000.0000000 tokens
     ledger: 1000,
     ledgerClosedAt: new Date("2025-01-01T00:00:00Z"),

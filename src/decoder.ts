@@ -18,13 +18,41 @@ function decode(scVal: StellarSdk.xdr.ScVal): unknown {
 }
 
 /**
+ * An address decoded from an ScVal.
+ *
+ * `muxedId` is the CAP-84 id carried alongside a muxed contract address, as a
+ * decimal string. It is a uint64: `Number` loses the top bits above 2^53, and a
+ * silently wrong customer id is worse than no id at all.
+ */
+interface DecodedAddress {
+  address: string;
+  muxedId: string | null;
+}
+
+/**
  * Decode an Address ScVal to a Stellar/contract address string (G... or C...).
  * Returns null if the ScVal is not an address type.
+ *
+ * A CAP-84 muxed contract (`scAddressTypeMuxedContract`, protocol 30) is
+ * decoded to its *base* C-address plus the muxed id, not to the combined
+ * W-address. The base address is what a customer's contract is; the id is what
+ * tells two customers of the same contract apart, and an indexer that keeps
+ * only the base address cannot. Decoding the pair explicitly also keeps the
+ * shape stable for callers that query by contract id.
  */
-function decodeAddress(scVal: StellarSdk.xdr.ScVal): string | null {
-  if (scVal.switch() !== StellarSdk.xdr.ScValType.scvAddress()) return null;
-  const addr = StellarSdk.Address.fromScVal(scVal);
-  return addr.toString();
+function decodeAddress(scVal: StellarSdk.xdr.ScVal): DecodedAddress | null {
+  if (scVal.type !== "scvAddress") return null;
+
+  const scAddress = scVal.address;
+  if (scAddress.type === "scAddressTypeMuxedContract") {
+    const muxed = scAddress.value;
+    return {
+      address: StellarSdk.StrKey.encodeContract(muxed.contractId.value),
+      muxedId: String(muxed.id),
+    };
+  }
+
+  return { address: StellarSdk.Address.fromScVal(scVal).toString(), muxedId: null };
 }
 
 /**
@@ -92,27 +120,35 @@ export function parseEvent(
   // ── Decode addresses by event type ───────────────────────
   let fromAddress: string | null = null;
   let toAddress: string | null = null;
+  let fromMuxedId: string | null = null;
+  let toMuxedId: string | null = null;
 
   if (eventType === "transfer") {
     // topics[1] = from, topics[2] = to
     if (topic.length < 3) {
       throw new Error(`Malformed transfer event: expected at least 3 topics, got ${topic.length}`);
     }
-    fromAddress = decodeAddress(topic[1]);
-    toAddress = decodeAddress(topic[2]);
-    if (!fromAddress || !toAddress) {
+    const from = decodeAddress(topic[1]);
+    const to = decodeAddress(topic[2]);
+    if (!from || !to) {
       throw new Error("Malformed transfer event: invalid from/to address");
     }
+    fromAddress = from.address;
+    fromMuxedId = from.muxedId;
+    toAddress = to.address;
+    toMuxedId = to.muxedId;
 
   } else if (eventType === "mint") {
     // topics[1] = admin (ignored as "from"), topics[2] = to recipient
     if (topic.length < 3) {
       throw new Error(`Malformed mint event: expected at least 3 topics, got ${topic.length}`);
     }
-    toAddress = decodeAddress(topic[2]);
-    if (!toAddress) {
+    const to = decodeAddress(topic[2]);
+    if (!to) {
       throw new Error("Malformed mint event: invalid to address");
     }
+    toAddress = to.address;
+    toMuxedId = to.muxedId;
     // fromAddress stays null — it's a mint, no sender
 
   } else if (eventType === "burn" || eventType === "clawback") {
@@ -120,10 +156,12 @@ export function parseEvent(
     if (topic.length < 2) {
       throw new Error(`Malformed ${eventType} event: expected at least 2 topics, got ${topic.length}`);
     }
-    fromAddress = decodeAddress(topic[1]);
-    if (!fromAddress) {
+    const from = decodeAddress(topic[1]);
+    if (!from) {
       throw new Error(`Malformed ${eventType} event: invalid from address`);
     }
+    fromAddress = from.address;
+    fromMuxedId = from.muxedId;
     // toAddress stays null
   }
 
@@ -132,6 +170,8 @@ export function parseEvent(
     eventType,
     fromAddress,
     toAddress,
+    fromMuxedId,
+    toMuxedId,
     amount,
     ledger,
     ledgerClosedAt: new Date(ledgerClosedAt),

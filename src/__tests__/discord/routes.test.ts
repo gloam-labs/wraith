@@ -132,8 +132,8 @@ function configure() {
   process.env.DISCORD_GUILD_ID = GUILD;
 }
 
-function b64(bytes: Buffer): string {
-  return bytes.toString("base64url");
+function b64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64url");
 }
 
 /** A complete, correctly signed link request for a fresh code. */

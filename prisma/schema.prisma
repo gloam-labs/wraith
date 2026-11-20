@@ -40,6 +40,14 @@ model TokenTransfer {
   eventType      String
   fromAddress    String?
   toAddress      String?
+  // CAP-84 muxed contract ids (protocol 30), as decimal strings. A transfer may
+  // address a muxed contract — a contract id plus a uint64 customer id — and
+  // the address columns above hold the underlying C-address. Null for every
+  // address that is not muxed, which is every row written before this column
+  // existed: nullable, so `db push` adds it without a default and without
+  // touching existing rows.
+  fromMuxedId    String?
+  toMuxedId      String?
   amount         String
   ledger         Int
   ledgerClosedAt DateTime
@@ -53,6 +61,8 @@ model TokenTransfer {
   @@unique([network, eventId])
   @@index([network, toAddress])
   @@index([network, fromAddress])
+  @@index([network, toMuxedId])
+  @@index([network, fromMuxedId])
   @@index([network, contractId])
   @@index([network, ledger])
   @@index([network, txHash])

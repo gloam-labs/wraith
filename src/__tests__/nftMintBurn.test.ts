@@ -113,7 +113,7 @@ describe("NFT mint and burn are recognised", () => {
     // plausible number rather than an error.
     const parsed = parseNftEvents([mintEvent(BOB, 9), transferEvent(7n)]);
     expect(parsed.map((p) => p.record.tokenId)).toEqual(["9", "7"]);
-    expect(parsed.map((p) => p.tokenIdScVal.switch().name)).toEqual(["scvU32", "scvU128"]);
+    expect(parsed.map((p) => p.tokenIdScVal.type)).toEqual(["scvU32", "scvU128"]);
   });
 });
 
