@@ -9,7 +9,8 @@
  * check", and `decideRoles` leaves those roles alone.
  */
 
-import type { DiscordMember } from "@prisma/client";
+import { Prisma, type DiscordMember } from "@prisma/client";
+import { when } from "../prismaWhen";
 
 import { prisma } from "../db";
 import { logger } from "../logger";
@@ -180,8 +181,12 @@ export async function syncMember(config: DiscordConfig, member: DiscordMember, n
     where: { discordUserId: member.discordUserId },
     data: {
       checkedAt: new Date(now),
-      ...(save.nonceHistory ? { nonceHistory: save.nonceHistory as unknown as object } : {}),
-      ...(save.firstSeenAt ? { firstSeenAt: save.firstSeenAt } : {}),
+      ...when<Prisma.DiscordMemberUpdateInput>(Boolean(save.nonceHistory), {
+        nonceHistory: save.nonceHistory as unknown as object,
+      }),
+      ...when<Prisma.DiscordMemberUpdateInput>(Boolean(save.firstSeenAt), {
+        firstSeenAt: save.firstSeenAt,
+      }),
     },
   });
 

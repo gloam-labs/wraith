@@ -23,6 +23,8 @@ import { timingSafeEqual } from "crypto";
 import { Router, Request, Response, NextFunction } from "express";
 
 import { prisma } from "../db";
+import { Prisma } from "@prisma/client";
+import { when } from "../prismaWhen";
 import { isMoneyFailureKind, isMoneyFailureRail } from "../linq/moneyFailures";
 
 function isConfigured(): boolean {
@@ -111,8 +113,8 @@ export function createOpsRouter(): Router {
       // (network, createdAt) index serves the filter.
       const rows = await prisma.moneyFailure.findMany({
         where: {
-          ...(rail ? { rail } : {}),
-          ...(kind ? { kind } : {}),
+          ...when<Prisma.MoneyFailureWhereInput>(Boolean(rail), { rail }),
+          ...when<Prisma.MoneyFailureWhereInput>(Boolean(kind), { kind }),
         },
         orderBy: { id: "desc" },
         take: limit,
