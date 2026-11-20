@@ -568,8 +568,8 @@ last_indexed_ledger{network="mainnet"} 5842100
 | `events_skipped_total` | counter | `reason` | Events the decoder dropped. `unrecognised` is non-token events (normal); `malformed` is token events that failed to decode — a rising rate points at a non-standard contract or a decoder bug. |
 | `last_indexed_ledger` | gauge | `network` | Highest committed ledger. Against the chain tip, this is lag. |
 | `db_query_duration_seconds` | histogram | `operation` | Duration of instrumented DB operations, failures included. |
-| `http_requests_total` | counter | `method`, `route`, `status` | HTTP requests served. `route` is the Express route *pattern*, never the raw URL, so addresses never become label values; an unmatched request reports `route="unknown"`. |
-| `http_request_duration_seconds` | histogram | `method`, `route` | HTTP latency, 5 ms to 40 s. No `status` label — the split is rarely worth the extra series. |
+| `http_requests_total` | counter | `method`, `route`, `status` | HTTP requests served. `route` is the full Express route *pattern* (e.g. `/search`, `/offramp/rate`, `/accounts/:address/transfers`), never the raw URL, so addresses and dynamic parameters never become label values; an unmatched request reports `route="unknown"`. |
+| `http_request_duration_seconds` | histogram | `method`, `route` | HTTP latency, 5 ms to 40 s. Labeled by method and full route pattern. No `status` label — the split is rarely worth the extra series. |
 | `provider_request_duration_seconds` | histogram | `provider`, `operation`, `outcome` | Time inside a payment-provider call (Linq), separately from the request. Same unit and buckets as the HTTP histogram: `http_request_duration_seconds - provider_request_duration_seconds` is wraith's own time. `operation` is a fixed list (`offramp_order`, `bill_pay`, …), never a URL. |
 
 Standard `process_*` and `nodejs_*` metrics are exported alongside these.
