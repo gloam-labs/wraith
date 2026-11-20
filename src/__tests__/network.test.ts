@@ -29,7 +29,7 @@ function recorder() {
         get: (_t, op: string) => (args: AnyRecord) => {
           calls.push({ model: name, op, args: args ?? {} });
           if (op === "count") return Promise.resolve(0);
-          if (op === "findMany") return Promise.resolve([]);
+          if (op === "findMany") return Promise.resolve(results.findMany ?? []);
           if (op === "deleteMany") return Promise.resolve({ count: 0 });
           if (op === "createMany") return Promise.resolve({ count: 0 });
           if (op === "findUnique" || op === "findFirst") {
@@ -66,6 +66,24 @@ function recorder() {
 }
 
 const { stub, calls, raw } = recorder();
+
+/** Make each prunable table report one expired row, so a delete is issued. */
+function withExpiredRows() {
+  for (const m of ["tokenTransfer", "nftTransfer", "hostFnLog", "lpShareTransfer"]) {
+    let served = false;
+    stub[m] = new Proxy(stub[m], {
+      get: (t, op: string) =>
+        op === "findMany"
+          ? (args: AnyRecord) => {
+              (t as AnyRecord).findMany(args);
+              const rows = served ? [] : [{ id: 1 }];
+              served = true;
+              return Promise.resolve(rows);
+            }
+          : (t as AnyRecord)[op],
+    });
+  }
+}
 (globalThis as AnyRecord).prisma = stub;
 
 // Imported after the stub is installed — db.ts binds its client at module load.
@@ -237,7 +255,8 @@ describe("destructive operations cannot cross networks", () => {
   });
 
   it("pruneOldTransfers scopes, so pruning testnet leaves mainnet history alone", async () => {
-    await db.pruneOldTransfers("testnet");
+    withExpiredRows();
+    await db.pruneOldTransfers("testnet", { pauseMs: 0 });
     expect(lastWhere("tokenTransfer", "deleteMany").network).toBe("testnet");
   });
 
@@ -249,7 +268,8 @@ describe("destructive operations cannot cross networks", () => {
   // enumerates must be pruned, or an unpruned one silently becomes the next
   // 1.7 GB.
   it("pruneOldTransfers prunes every indexed table, not just transfers", async () => {
-    await db.pruneOldTransfers("testnet");
+    withExpiredRows();
+    await db.pruneOldTransfers("testnet", { pauseMs: 0 });
     for (const model of ["tokenTransfer", "nftTransfer", "hostFnLog", "lpShareTransfer"]) {
       const where = lastWhere(model, "deleteMany");
       expect(where.network).toBe("testnet");

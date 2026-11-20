@@ -437,6 +437,22 @@ export const lastIndexedLedger = new Gauge({
   registers: [registry],
 });
 
+/** Rows removed by the retention job. Labels: network, table (four fixed values). */
+export const pruneRowsDeletedTotal = new Counter({
+  name: "prune_rows_deleted_total",
+  help: "Rows deleted by the data-retention job, per network and table",
+  labelNames: ["network", "table"] as const,
+  registers: [registry],
+});
+
+/** Unix time of the last retention run that finished without error, per network. */
+export const pruneLastSuccessTimestampSeconds = new Gauge({
+  name: "prune_last_success_timestamp_seconds",
+  help: "Unix time of the last successful data-retention run, per network",
+  labelNames: ["network"] as const,
+  registers: [registry],
+});
+
 /**
  * Wall-clock duration of instrumented database operations.
  *

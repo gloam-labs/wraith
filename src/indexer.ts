@@ -3,7 +3,6 @@ import { validateNetworkConfig, withRetry } from "./rpc";
 import {
   getLastIndexedLedger,
   setLastIndexedLedger,
-  pruneOldTransfers,
 } from "./db";
 import { resolveLpPoolIds, loadKnownLpPools } from "./indexer/lp-shares";
 import { pollParallel, type ParallelIo } from "./indexer/parallel";
@@ -110,9 +109,6 @@ const RPC_MAX_LOOKBACK_LEDGERS = 100_000;
 // reading ledgers that haven't fully propagated yet.
 const TIP_LAG = 2;
 
-// Prune old data every ~1 hour (600 poll cycles × 6s = 3600s)
-const PRUNE_EVERY_CYCLES = 600;
-
 // How often to check watched contracts for expired storage (#137). Each check
 // costs one RPC call per unique watched contract, so this is deliberately far
 // rarer than a poll: a contract's TTL is measured in weeks, and detecting an
@@ -128,7 +124,7 @@ const TOMBSTONE_EVERY_CYCLES = parseInt(
  * Everything one indexer loop owns.
  *
  * This used to be module-level `let`s (`startedAt`, `totalIndexed`,
- * `pollCycleCount`) plus module-level watch lists and one source switcher. With
+ * the cycle counters) plus module-level watch lists and one source switcher. With
  * a loop per network that becomes a correctness problem, not a tidiness one:
  * two loops would increment the same counters, so `/status` could not say how
  * far either chain had actually got, and they would share one source switcher
@@ -144,7 +140,6 @@ export type LoopState = {
   sourceSwitcher: SourceSwitcher;
   startedAt: number;
   totalIndexed: number;
-  pollCycleCount: number;
   /**
    * Contracts established as liquidity pools on this network.
    *
@@ -156,9 +151,7 @@ export type LoopState = {
    */
   knownLpPools: Set<string>;
   /**
-   * Separate from pollCycleCount, which the prune resets on its own schedule.
-   * Sharing one counter would make whichever cadence is shorter starve the
-   * other — the longer job would never reach its threshold.
+   * Counts poll cycles that ingested something, to pace the expiry check.
    */
   tombstoneCycleCount: number;
   /**
@@ -195,7 +188,6 @@ export function createLoopState(network: Network): LoopState {
     }),
     startedAt: Date.now(),
     totalIndexed: 0,
-    pollCycleCount: 0,
     tombstoneCycleCount: 0,
     knownLpPools: new Set(resolveLpPoolIds(network)),
     stopped: false,
@@ -614,15 +606,6 @@ export async function startIndexer(network?: Network): Promise<void> {
       }
 
       currentLedger = await ingestWindow(loop, currentLedger, target);
-
-      // Periodic data retention cleanup
-      loop.pollCycleCount++;
-      if (loop.pollCycleCount >= PRUNE_EVERY_CYCLES) {
-        loop.pollCycleCount = 0;
-        await pruneOldTransfers(net).catch((e: unknown) =>
-          console.error(`[indexer/${net}] Prune failed:`, e)
-        );
-      }
 
       await maybeTombstoneExpiredContracts(loop, currentLedger);
     } catch (err) {
