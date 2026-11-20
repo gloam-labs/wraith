@@ -467,6 +467,39 @@ export async function observeDbQuery<T>(operation: string, fn: () => Promise<T>)
   }
 }
 
+/**
+ * Total database read operations, labelled by target ("primary" or "replica").
+ */
+export const dbReadsTotal = new Counter({
+  name: "db_reads_total",
+  help: "Total database read operations by target",
+  labelNames: ["target"] as const,
+  registers: [registry],
+});
+
+/**
+ * Total database read fallbacks from a replica to the primary following a connection error.
+ */
+export const dbReadFallbacksTotal = new Counter({
+  name: "db_read_fallbacks_total",
+  help: "Total database read fallbacks from replica to primary",
+  registers: [registry],
+});
+
+// Pre-initialize label combinations so they appear in scrape output even before first read
+dbReadsTotal.labels("primary").inc(0);
+dbReadsTotal.labels("replica").inc(0);
+
+/** Record a read query directed to primary or replica. */
+export function recordDbRead(target: "primary" | "replica"): void {
+  dbReadsTotal.inc({ target });
+}
+
+/** Record a read query fallback from replica to primary after connection failure. */
+export function recordDbFallback(): void {
+  dbReadFallbacksTotal.inc();
+}
+
 /** Record one failed RPC attempt. `outcome` distinguishes a retry from a give-up. */
 export function recordRpcError(outcome: "retry" | "exhausted"): void {
   rpcErrorsTotal.inc({ outcome });

@@ -759,6 +759,7 @@ run docs:openapi` (and the deployment's network settings).
 | -------------------------- | ------------- | --------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`             | —             | Postgres connection string (required)                                                         |
 | `DIRECT_DATABASE_URL`      | —             | Direct (non-pooled) Postgres URL — required for Prisma migrations on Supabase                 |
+| `DATABASE_REPLICAS`        | *(empty)*     | Optional comma-separated Postgres URLs for read replicas.                                     |
 | `STELLAR_NETWORK`          | —             | `testnet` or `mainnet`. Default single-network mode.                                          |
 | `SOROBAN_RPC_URL_TESTNET`  | `https://soroban-testnet.stellar.org` | Explicit Soroban RPC endpoint for testnet. |
 | `SOROBAN_RPC_URL_MAINNET`  | —             | Explicit Soroban RPC endpoint for mainnet. Required to index mainnet in multi-network setups. |
@@ -801,6 +802,43 @@ If `HORIZON_URL` is set, the indexer checks the RPC source first and switches to
 | Futurenet (public) | `https://rpc-futurenet.stellar.org`                       |
 
 > **Important:** Stellar RPC retains \~7 days of event history. For longer historical coverage, use [Galexie](https://developers.stellar.org/docs/data/indexers) + the [Token Transfer Processor](https://developers.stellar.org/docs/data/indexers/build-your-own/processors/token-transfer-processor).
+
+### Database Read Replicas
+
+Wraith supports distributing database read load across read replicas configured via `DATABASE_REPLICAS` (a comma-separated list of Postgres connection URLs).
+
+#### What Replicas Are Used For
+Replicas offload high-volume read traffic from the primary database for append-only, high-throughput indexed data where slight replication lag (eventual consistency) is acceptable:
+- **Token Transfers** (`TokenTransfer`)
+- **NFT Transfers** (`NftTransfer`)
+- **Host Function Logs** (`HostFnLog`)
+- **LP-Share Transfers** (`LpShareTransfer`)
+- **Account Summaries** (`AccountSummary`)
+
+#### What Replicas Are NEVER Used For
+Any table requiring read-after-write consistency or transactional integrity **never** routes reads to a replica; these queries always execute directly on the primary:
+- **Order Processing & Balances:** `OfframpOrder`, `NgnOrder`, `FeePolicy`, `FeeQuote`, `MoneyFailure` (ensures order creation, deduplication, and retry lookups immediately observe recent writes).
+- **Indexer State & Cursors:** `IndexerState`, `IndexerCheckpoint`, `RetentionJobRun`, `ContractTombstone`, `BackfillCursor` (prevents indexer startup loops from re-processing finished ledgers due to stale cursor reads).
+- **Metadata Caches:** `TokenMetadata`, `NftMetadata` (prevents redundant RPC fetches and cache thrashing following an initial cache miss write).
+- **Webhooks:** `WebhookSubscription`, `WebhookDelivery`.
+- **Discord Authentication & Proofs:** `DiscordMember`, `DiscordLinkCode`, `DiscordGithubRequest`.
+- **Raw SQL Queries (`$queryRaw`, `$executeRaw`) & Interactive Transactions (`$transaction`):** Always bypass replicas and execute on the primary.
+
+#### Forcing the Primary for a Read
+Callers can force a read to execute on the primary database for a specific operation:
+1. **Via `prisma.$primary`:** `await prisma.$primary.tokenTransfer.findMany(...)`
+2. **Via `withPrimary`:** `await withPrimary(async () => prisma.tokenTransfer.findMany(...))`
+3. **Via query args:** `await prisma.tokenTransfer.findMany({ where: { ... }, forcePrimary: true })`
+
+#### Health Checks and Failover
+- Replicas are probed every 10 seconds (or configured interval) using `SELECT 1`.
+- When a read on a replica fails with a **connection or infrastructure error**, that replica is immediately marked unhealthy and skipped on subsequent queries without waiting for the health check timer. The query transparently falls back to the primary.
+- Errors that are the **query's own fault** (e.g. invalid arguments, validation errors, schema constraint violations) do **not** trigger primary fallback and do not mark the replica unhealthy.
+
+#### Metrics
+Read routing and failovers are tracked in Prometheus metrics:
+- `db_reads_total{target="primary|replica"}`: Read queries executed against the primary vs. replicas.
+- `db_read_fallbacks_total`: Total number of queries that fell back from a replica to the primary after a connection error.
 
 ***
 
