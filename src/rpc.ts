@@ -101,29 +101,49 @@ export interface RawEvent {
  * @param contractIds  Filter to specific contract IDs. Pass [] to skip filter.
  * @param limit        Max events per call (RPC hard-caps at 10 000).
  * @param network      Which chain to read. Defaults to the configured network.
+ * @param cursor       Optional paging cursor from a previous truncated page.
  */
 export async function fetchEvents(
   startLedger: number,
   contractIds: string[],
   limit: number = 10_000,
-  network?: Network
-): Promise<{ events: RawEvent[]; latestLedger: number }> {
+  network?: Network,
+  cursor?: string
+): Promise<{
+  events: RawEvent[];
+  latestLedger: number;
+  cursor?: string;
+  maxEventLedger: number;
+  pageFull: boolean;
+}> {
   const rpc = getRpc(network);
 
   // Build the request using the correct Server.GetEventsRequest type.
   // Api.EventFilter allows: type, contractIds (string[]), topics (string[][]).
-  const request: RPC.Server.GetEventsRequest = {
-    startLedger,
-    limit,
-    filters: [
-      {
-        type: "contract",
-        // Only pass contractIds if the caller is watching specific contracts;
-        // omitting the field lets RPC return events for all contracts.
-        ...(contractIds.length > 0 ? { contractIds } : {}),
-      },
-    ],
-  };
+  // A paging cursor replaces startLedger; the RPC forbids both together.
+  const request = (cursor
+    ? {
+        cursor,
+        limit,
+        filters: [
+          {
+            type: "contract",
+            ...(contractIds.length > 0 ? { contractIds } : {}),
+          },
+        ],
+      }
+    : {
+        startLedger,
+        limit,
+        filters: [
+          {
+            type: "contract",
+            // Only pass contractIds if the caller is watching specific contracts;
+            // omitting the field lets RPC return events for all contracts.
+            ...(contractIds.length > 0 ? { contractIds } : {}),
+          },
+        ],
+      }) as RPC.Server.GetEventsRequest;
 
   const resp = await rpc.getEvents(request);
 
@@ -140,8 +160,14 @@ export async function fetchEvents(
     topic: e.topic,
     value: e.value,
   }));
-
-  return { events, latestLedger: resp.latestLedger };
+  const maxEventLedger = events.reduce((m, e) => Math.max(m, e.ledger), 0);
+  return {
+    events,
+    latestLedger: resp.latestLedger,
+    cursor: resp.cursor || undefined,
+    maxEventLedger,
+    pageFull: events.length >= limit,
+  };
 }
 
 // ─── Network tip helper ───────────────────────────────────────────────────────
@@ -245,8 +271,8 @@ export async function fetchEventsSafe(
   // If the range is a single ledger and it fails, skip it.
   if (startLedger >= endLedger) {
     try {
-      const { events, latestLedger } = await _fetchFn(startLedger, contractIds, limit, network);
-      return { events, highestLedger: Math.max(startLedger, latestLedger) };
+      const { events, maxEventLedger } = await _fetchFn(startLedger, contractIds, limit, network);
+      return { events, highestLedger: Math.min(Math.max(startLedger, maxEventLedger), endLedger) };
     } catch (err) {
       if (!isXdrError(err)) throw err;
       console.warn(`[rpc] Skipping ledger ${startLedger} — XDR decode error: ${(err as Error).message}`);
@@ -256,10 +282,35 @@ export async function fetchEventsSafe(
       return { events: [], highestLedger: startLedger };
     }
   }
+  // Page through the range with the RPC cursor until drained or the page budget is hit.
+  const MAX_PAGES = 100;
 
   try {
-    const { events, latestLedger } = await _fetchFn(startLedger, contractIds, limit, network);
-    return { events, highestLedger: latestLedger };
+    const allEvents: RawEvent[] = [];
+    let cursor: string | undefined;
+    let maxSeen = startLedger - 1;
+    let pages = 0;
+    let drained = false;
+    while (pages < MAX_PAGES) {
+      const page = cursor
+        ? await _fetchFn(startLedger, contractIds, limit, network, cursor)
+        : await _fetchFn(startLedger, contractIds, limit, network);
+      pages++;
+      allEvents.push(...page.events);
+      if (page.maxEventLedger > maxSeen) maxSeen = page.maxEventLedger;
+      if (!page.pageFull || !page.cursor) {
+        drained = true;
+        break;
+      }
+      cursor = page.cursor;
+    }
+    // Only ledgers whose events are fully returned are safe to commit. If the
+    // page budget ran out mid-range, stop at the last fully covered ledger.
+    const fullyCovered = drained ? endLedger : Math.max(startLedger, maxSeen);
+    return {
+      events: allEvents,
+      highestLedger: Math.min(fullyCovered, endLedger),
+    };
   } catch (err) {
     if (!isXdrError(err)) throw err;
 
