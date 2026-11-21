@@ -500,6 +500,32 @@ both chains in a single round-trip:
 }
 ```
 
+`transfers` accepts the same filters as the REST transfer routes, with the
+same validation — `limit` must be 1–200, `fromLedger`/`toLedger` are inclusive
+ledger bounds, `fromDate`/`toDate` are ISO 8601 datetimes with an offset,
+`eventTypes` is a list of `transfer`, `mint`, `burn` or `clawback`
+(case-insensitive), and `token` filters to one token contract like
+`contractId` does. `Transfer` carries the `id` REST already returns, and
+`TokenSummary` carries `displayTotalReceived`, `displayTotalSent` and
+`displayNetFlow` — the raw totals scaled by the token's decimals, as
+`GET /summary/:address` computes them.
+
+```graphql
+{
+  transfers(address: "GABC…", limit: 2, eventTypes: ["transfer"], fromLedger: 1000) {
+    transfers { id eventId amount displayAmount }
+    nextCursor
+    hasMore
+  }
+}
+```
+
+Page with the cursor, not the offset: pass the previous page's `nextCursor`
+back as `cursor` to continue. A malformed cursor is an error, not a silent
+first page — the list would otherwise restart from the top and loop forever.
+`cursor` and `offset` do not combine; when a cursor is given, the offset is
+ignored, exactly as on REST.
+
 **WebSockets** take it on the upgrade URL — `ws://host/subscribe/GABC…?network=mainnet`
 — and the stream is filtered to that network. A socket opened with an invalid or
 un-enabled selector is closed with code `1008` and the reason, rather than left
