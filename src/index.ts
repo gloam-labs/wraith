@@ -243,9 +243,24 @@ async function main() {
 
   // ── Graceful shutdown ──────────────────────────────────────────────────────
   let stopOhlcRefreshWorker: (() => void) | undefined;
+  let httpServer: http.Server | undefined;
+  const SHUTDOWN_DRAIN_TIMEOUT_MS = 10_000;
   const shutdown = async (signal: string) => {
     logger.info("shutdown.received", { route: "startup", status: 0, durationMs: 0, requestId: bootId, signal });
     stopOhlcRefreshWorker?.();
+    if (httpServer) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          logger.warn("shutdown.drain_timeout", { route: "startup", status: 0, durationMs: 0, requestId: bootId });
+          resolve();
+        }, SHUTDOWN_DRAIN_TIMEOUT_MS);
+        timer.unref();
+        httpServer!.close(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
     await prisma.$disconnect();
     process.exit(0);
   };
@@ -255,6 +270,7 @@ async function main() {
   // ── Start REST API + WebSocket server ─────────────────────────────────────
   const app = createApp();
   const server = http.createServer(app);
+  httpServer = server;
 
   // Attach WebSocket upgrade handler — clients connect to /subscribe/:address
   attachWebSocketServer(server);
@@ -291,27 +307,19 @@ async function main() {
   if (ohlcIntervalMs !== undefined) {
     stopOhlcRefreshWorker = startOhlcRefreshWorker(ohlcIntervalMs);
   }
-
-  // ── Start indexer in the background ───────────────────────────────────────
-  // startIndexer() runs an infinite loop; we intentionally don't await it
-  // so the API stays responsive while indexing happens concurrently.
-  //
-  // SKIP_INDEXER lets a deployment serve the read API without a live Soroban
-  // RPC connection — used by the integration test stack (docker-compose.test.yml),
-  // which exercises the HTTP surface only. Without this guard the indexer throws
-  // on the missing RPC endpoint and takes the whole process (and API) down.
-  if (process.env.SKIP_INDEXER === "true") {
-    logger.info("indexer.skipped", { route: "startup", status: 0, durationMs: 0, requestId: bootId });
-  } else {
-    // One loop per enabled network (NETWORKS env; defaults to STELLAR_NETWORK).
-    // Each loop restarts itself on crash rather than taking the process down —
-    // a mainnet RPC key expiring must not stop testnet indexing, nor the API.
-    startAllIndexers();
-  }
 }
 
 // Called unconditionally, not behind `require.main === module`:
 // src/__tests__/ohlcStartup.test.ts boots the real entrypoint with
 // `jest.isolateModules(() => require("../index"))` to assert the startup
 // wiring, and under that require this module is not `require.main`.
-main();
+main().catch((err) => {
+  logger.error("startup.failed", {
+    route: "startup",
+    status: 0,
+    durationMs: 0,
+    requestId: "startup",
+    errorName: (err as Error)?.name ?? "unknown error",
+  });
+  process.exit(1);
+});
