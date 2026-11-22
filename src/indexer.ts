@@ -11,7 +11,7 @@ import { processEventBatch, batchTotal } from "./indexer/batch";
 import { tombstoneExpiredContracts } from "./indexer/tombstones";
 import { createSourceSwitcherWithConfig, type SourceSwitcher } from "./indexer/sources";
 import { currentNetwork, enabledNetworks, resolveNetwork, type Network } from "./network";
-import { ledgersIndexedTotal, lastIndexedLedger } from "./metrics";
+import { ledgersIndexedTotal, lastIndexedLedger, recordChainTip } from "./metrics";
 
 // ─── NFT Contract IDs ─────────────────────────────────────────────────────────
 /**
@@ -572,7 +572,8 @@ export async function startIndexer(network?: Network): Promise<void> {
   }
 
   // ── Determine start ledger ──────────────────────────────────────────────────
-  const latestLedger = await withRetry(() => loop.sourceSwitcher.getLatestLedger());
+  const latestLedger = await withRetry(() => loop.sourceSwitcher.getLatestLedger(), net);
+  recordChainTip(net, latestLedger);
   const minSafeLedger = latestLedger - RPC_MAX_LOOKBACK_LEDGERS;
 
   let currentLedger: number;
@@ -604,7 +605,8 @@ export async function startIndexer(network?: Network): Promise<void> {
   // it is gone. Production registers once and never clears.
   while (loops.get(net) === loop && !loop.stopped) {
     try {
-      const tip = await withRetry(() => loop.sourceSwitcher.getLatestLedger());
+      const tip = await withRetry(() => loop.sourceSwitcher.getLatestLedger(), net);
+      recordChainTip(net, tip);
       const target = tip - TIP_LAG;
 
       if (currentLedger >= target) {

@@ -264,7 +264,7 @@ export const transfersStoredTotal = new Counter({
 export const rpcErrorsTotal = new Counter({
   name: "rpc_errors_total",
   help: "Failed RPC attempts (each retry counts separately)",
-  labelNames: ["outcome"] as const,
+  labelNames: ["network", "outcome"] as const,
   registers: [registry],
 });
 
@@ -438,6 +438,19 @@ export const lastIndexedLedger = new Gauge({
 });
 
 /**
+ * The latest ledger reported by a successful chain tip read, per network.
+ *
+ * This gauge is set from RPC and fallback-source polling so lag can be
+ * calculated as `chain_tip_ledger - last_indexed_ledger`.
+ */
+export const chainTipLedger = new Gauge({
+  name: "chain_tip_ledger",
+  help: "Latest chain tip ledger sequence observed, per network",
+  labelNames: ["network"] as const,
+  registers: [registry],
+});
+
+/**
  * Wall-clock duration of instrumented database operations.
  *
  * Buckets run from 5ms to 10s: below 5ms nothing here is worth alerting on,
@@ -468,8 +481,13 @@ export async function observeDbQuery<T>(operation: string, fn: () => Promise<T>)
 }
 
 /** Record one failed RPC attempt. `outcome` distinguishes a retry from a give-up. */
-export function recordRpcError(outcome: "retry" | "exhausted"): void {
-  rpcErrorsTotal.inc({ outcome });
+export function recordRpcError(network: Network, outcome: "retry" | "exhausted"): void {
+  rpcErrorsTotal.inc({ network, outcome });
+}
+
+/** Record a successful chain tip read for one network. */
+export function recordChainTip(network: Network, ledger: number): void {
+  chainTipLedger.set({ network }, ledger);
 }
 
 /**

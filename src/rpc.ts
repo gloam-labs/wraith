@@ -1,6 +1,6 @@
 import { rpc as RPC, xdr, scValToNative, Contract, TransactionBuilder, Account, Networks } from "@stellar/stellar-sdk";
 import { resolveNetwork, currentNetwork, type Network } from "./network";
-import { recordRpcError, recordSkippedLedger } from "./metrics";
+import { recordChainTip, recordRpcError, recordSkippedLedger } from "./metrics";
 
 // ─── Network config ───────────────────────────────────────────────────────────
 const TESTNET_RPC_URL = "https://soroban-testnet.stellar.org";
@@ -146,17 +146,30 @@ export async function fetchEvents(
 
 // ─── Network tip helper ───────────────────────────────────────────────────────
 export async function getLatestLedger(network?: Network): Promise<number> {
-  const rpc = getRpc(network);
+  const net = resolveNetwork(network);
+  const rpc = getRpc(net);
   const resp = await rpc.getLatestLedger();
+  recordChainTip(net, resp.sequence);
   return resp.sequence;
 }
 
 // ─── Exponential back-off retry ───────────────────────────────────────────────
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  maxAttempts = 5,
+  networkOrMaxAttempts: Network | number = resolveNetwork(),
+  maxAttemptsOrBaseDelay: number = 5,
   baseDelayMs = 1_000
 ): Promise<T> {
+  const network = typeof networkOrMaxAttempts === "number"
+    ? resolveNetwork()
+    : networkOrMaxAttempts;
+  const maxAttempts = typeof networkOrMaxAttempts === "number"
+    ? networkOrMaxAttempts
+    : maxAttemptsOrBaseDelay;
+  if (typeof networkOrMaxAttempts === "number") {
+    baseDelayMs = maxAttemptsOrBaseDelay;
+  }
+
   let attempt = 0;
   while (true) {
     try {
@@ -164,10 +177,10 @@ export async function withRetry<T>(
     } catch (err) {
       attempt++;
       if (attempt >= maxAttempts) {
-        recordRpcError("exhausted");
+        recordRpcError(network, "exhausted");
         throw err;
       }
-      recordRpcError("retry");
+      recordRpcError(network, "retry");
       const delay = baseDelayMs * 2 ** (attempt - 1);
       console.warn(
         `[rpc] Attempt ${attempt} failed — retrying in ${delay}ms…`,

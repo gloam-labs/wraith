@@ -558,15 +558,19 @@ ledgers_indexed_total{network="mainnet"} 48213
 # HELP last_indexed_ledger Highest ledger sequence committed by the indexer, per network
 # TYPE last_indexed_ledger gauge
 last_indexed_ledger{network="mainnet"} 5842100
+# HELP chain_tip_ledger Latest chain tip ledger sequence observed, per network
+# TYPE chain_tip_ledger gauge
+chain_tip_ledger{network="mainnet"} 5842150
 ```
 
 | Metric | Type | Labels | What it says |
 | ------ | ---- | ------ | ------------ |
 | `ledgers_indexed_total` | counter | `network` | Ledgers the indexer has advanced through. A flat `rate()` on a network whose loop should be running means it has stalled. |
 | `transfers_stored_total` | counter | `network`, `type` | Rows persisted, split `fungible` / `nft` — one parse path can break while the other keeps working. |
-| `rpc_errors_total` | counter | `outcome` | Failed RPC attempts. `retry` counts attempts `withRetry` absorbed, `exhausted` counts calls that gave up — a degrading endpoint shows up in `retry` long before it fails a call. |
+| `rpc_errors_total` | counter | `network`, `outcome` | Failed RPC attempts, split by chain and whether `withRetry` retried or exhausted. |
 | `events_skipped_total` | counter | `reason` | Events the decoder dropped. `unrecognised` is non-token events (normal); `malformed` is token events that failed to decode — a rising rate points at a non-standard contract or a decoder bug. |
 | `last_indexed_ledger` | gauge | `network` | Highest committed ledger. Against the chain tip, this is lag. |
+| `chain_tip_ledger` | gauge | `network` | Latest chain tip observed. Compared with `last_indexed_ledger`, it measures indexer lag. |
 | `db_query_duration_seconds` | histogram | `operation` | Duration of instrumented DB operations, failures included. |
 | `http_requests_total` | counter | `method`, `route`, `status` | HTTP requests served. `route` is the Express route *pattern*, never the raw URL, so addresses never become label values; an unmatched request reports `route="unknown"`. |
 | `http_request_duration_seconds` | histogram | `method`, `route` | HTTP latency, 5 ms to 40 s. No `status` label — the split is rarely worth the extra series. |
@@ -1022,13 +1026,3 @@ npx @veil/wraith-cli webhooks create https://your-app.com/webhook --events trans
 # Delete a webhook registration
 npx @veil/wraith-cli webhooks delete <webhook-id>
 ```
-
-***
-
-## References
-
-- [Stellar RPC](https://developers.stellar.org/network/soroban-rpc/methods/getEvents) [`getEvents`](https://developers.stellar.org/network/soroban-rpc/methods/getEvents)
-- [CAP-67 Unified Token Events](https://github.com/stellar/stellar-protocol/discussions/1553)
-- [SEP-41 Token Interface](https://stellar.org/protocol/sep-41)
-- [Token Transfer Processor](https://developers.stellar.org/docs/data/indexers/build-your-own/processors/token-transfer-processor)
-- [Galexie — Ledger Data Lake](https://developers.stellar.org/docs/data/indexers)
