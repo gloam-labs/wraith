@@ -107,6 +107,20 @@ function validAmount(value: string | undefined): string | null {
 }
 
 /**
+ * Floors and caps we have already warned about, so a misconfiguration logs
+ * once per process per asset rather than on every request.
+ */
+const warnedInverted = new Set<string>();
+
+function warnInverted(code: string, floorVar: string, capVar: string): void {
+  if (warnedInverted.has(code)) return;
+  warnedInverted.add(code);
+  console.error(
+    `[fees] ${floorVar} is above ${capVar} for ${code}; no fee is charged for ${code} until they are fixed`,
+  );
+}
+
+/**
  * The fee for each asset we charge on, keyed by asset code.
  *
  * Per asset, and always **in the asset being sent**. Charging 0.1 USDC on an
@@ -136,13 +150,28 @@ export function configuredFees(sentAmount?: number): Record<string, PlatformFee>
    * nothing worth naming. A percent with a floor and a cap keeps the small
    * sends cheap without making the large ones punitive.
    */
-  const entry = (code: string, issuer: string | null, flat: string | null, min: string | null, max: string | null): PlatformFee | null => {
+  const entry = (
+    code: string,
+    issuer: string | null,
+    flat: string | null,
+    min: string | null,
+    max: string | null,
+    floorVar: string,
+    capVar: string,
+  ): PlatformFee | null => {
     if (percent === null) {
       // No rate configured: the flat amount, exactly as before.
       return flat ? { amount: flat, assetCode: code, assetIssuer: issuer, destination } : null;
     }
+    // The floor is the explicit minimum, or the flat amount when no minimum is
+    // set. Either way it must not sit above an explicit cap: that would make
+    // the cap silently meaningless. Drop the entry instead of guessing.
     const floor = min ? Number(min) : flat ? Number(flat) : null;
     const cap = max ? Number(max) : null;
+    if (floor !== null && cap !== null && floor > cap) {
+      warnInverted(code, min ? floorVar : `${floorVar} (inherited from VEIL_FEE_AMOUNT)`, capVar);
+      return null;
+    }
     // Without an amount to price, answer with the floor — see `amount` above.
     const amount =
       sentAmount !== undefined && Number.isFinite(sentAmount) && sentAmount > 0
@@ -170,6 +199,8 @@ export function configuredFees(sentAmount?: number): Record<string, PlatformFee>
       validAmount(process.env.VEIL_FEE_AMOUNT),
       validAmount(process.env.VEIL_FEE_MIN),
       validAmount(process.env.VEIL_FEE_MAX),
+      "VEIL_FEE_MIN",
+      "VEIL_FEE_MAX",
     );
     if (fee) fees[issuedCode] = fee;
   }
@@ -181,6 +212,8 @@ export function configuredFees(sentAmount?: number): Record<string, PlatformFee>
     validAmount(process.env.VEIL_FEE_AMOUNT_XLM),
     validAmount(process.env.VEIL_FEE_MIN_XLM),
     validAmount(process.env.VEIL_FEE_MAX_XLM),
+    "VEIL_FEE_MIN_XLM",
+    "VEIL_FEE_MAX_XLM",
   );
   if (xlm) fees["XLM"] = xlm;
 

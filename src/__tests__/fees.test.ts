@@ -122,6 +122,49 @@ describe("configuredFees", () => {
     expect(configuredFees(100_000)["XLM"]).toMatchObject({ amount: "20" });
   });
 
+  // A floor above the cap is a misconfiguration: every send would be charged
+  // the floor and the cap would silently do nothing. Drop the asset's fee.
+  it("drops the fee when a floor is set above the cap", () => {
+    process.env.VEIL_FEE_PERCENT = "0.5";
+    process.env.VEIL_FEE_MIN = "5";
+    process.env.VEIL_FEE_MAX = "1";
+
+    expect(configuredFees(100)["USDC"]).toBeUndefined();
+  });
+
+  it("drops the XLM fee when a floor is set above the cap", () => {
+    process.env.VEIL_FEE_PERCENT = "0.5";
+    process.env.VEIL_FEE_MIN_XLM = "5";
+    process.env.VEIL_FEE_MAX_XLM = "1";
+
+    expect(configuredFees(100)["XLM"]).toBeUndefined();
+  });
+
+  it("drops the fee when the inherited flat floor is above an explicit cap", () => {
+    process.env.VEIL_FEE_PERCENT = "0.5";
+    process.env.VEIL_FEE_AMOUNT = "0.1";
+    process.env.VEIL_FEE_MAX = "0.05";
+
+    expect(configuredFees(100)["USDC"]).toBeUndefined();
+  });
+
+  it("drops the XLM fee when the inherited flat floor is above an explicit cap", () => {
+    process.env.VEIL_FEE_PERCENT = "0.5";
+    process.env.VEIL_FEE_AMOUNT_XLM = "0.5";
+    process.env.VEIL_FEE_MAX_XLM = "0.1";
+
+    expect(configuredFees(100)["XLM"]).toBeUndefined();
+  });
+
+  it("keeps a fixed fee when the floor equals the cap", () => {
+    process.env.VEIL_FEE_PERCENT = "0.5";
+    process.env.VEIL_FEE_MIN = "2";
+    process.env.VEIL_FEE_MAX = "2";
+
+    expect(configuredFees(1)["USDC"]).toMatchObject({ amount: "2" });
+    expect(configuredFees(100_000)["USDC"]).toMatchObject({ amount: "2" });
+  });
+
   // A rate over 100% would take more than the user is sending.
   it.each([["0"], ["-1"], ["101"], ["abc"]])("ignores an impossible rate (%s)", (percent) => {
     process.env.VEIL_FEE_PERCENT = percent;
