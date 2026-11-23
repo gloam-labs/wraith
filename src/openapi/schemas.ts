@@ -1041,3 +1041,66 @@ export const discordInteractionResponseSchema = z
   .object({ type: z.number().int() })
   .passthrough()
   .openapi({ description: "A Discord interaction response, in Discord's own format." });
+
+// ─── Stealth Announcements (#1320) ───────────────────────────────────────────
+
+export const announcementsQuerySchema = z
+  .object({
+    network: networkQuerySchema,
+    fromLedger: z.preprocess(
+      firstValue,
+      z.coerce.number().int().min(0, "fromLedger must be >= 0").openapi({
+        description: "Starting ledger sequence (inclusive)",
+        example: 1000,
+      }),
+    ),
+    toLedger: optionalQueryInt({
+      min: 0,
+      description: "Ending ledger sequence (inclusive)",
+    }),
+    viewTag: optionalQueryInt({
+      min: 0,
+      max: 255,
+      description: "One-byte view tag (0-255) to filter stealth announcements",
+    }),
+    limit: optionalQueryInt({
+      min: 1,
+      max: 200,
+      description: "Maximum number of announcements to return (default 50, max 200)",
+    }),
+    cursor: optionalQueryString("Opaque pagination cursor from a previous page"),
+  })
+  .refine(
+    (data) => data.toLedger === undefined || data.toLedger >= data.fromLedger,
+    {
+      message: "toLedger must be greater than or equal to fromLedger",
+      path: ["toLedger"],
+    },
+  )
+  .openapi({ description: "Query filters for stealth announcements" });
+
+export const announcementItemSchema = z
+  .object({
+    id: z.number().int().openapi({ description: "Unique database ID of the announcement" }),
+    contractId: z.string().openapi({ description: "Announcer contract address (C...)" }),
+    ledger: z.number().int().openapi({ description: "Ledger sequence where announcement was emitted" }),
+    ledgerClosedAt: z.string().datetime().openapi({ description: "UTC close time of the ledger" }),
+    txHash: z.string().openapi({ description: "Transaction hash" }),
+    eventId: z.string().openapi({ description: "Stellar RPC event ID" }),
+    version: z.number().int().openapi({ description: "Announcement schema version (1)" }),
+    viewTag: z.number().int().min(0).max(255).openapi({ description: "One-byte view tag (0-255)" }),
+    ephemeralPublicKey: z.string().openapi({ description: "32-byte ephemeral public key (hex)" }),
+    sealedNote: z.string().openapi({ description: "Sealed note payload (hex)" }),
+  })
+  .openapi({ description: "Stealth payment announcement" });
+
+export const announcementsResponseSchema = z
+  .object({
+    announcements: z.array(announcementItemSchema),
+    fromLedger: z.number().int(),
+    toLedger: z.number().int().optional(),
+    limit: z.number().int(),
+    nextCursor: z.string().nullable(),
+    hasMore: z.boolean(),
+  })
+  .openapi({ description: "Feed of stealth payment announcements" });

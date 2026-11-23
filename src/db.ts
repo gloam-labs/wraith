@@ -1101,3 +1101,13 @@ export async function queryPopularAssets(params: PopularAssetsQueryParams) {
 
   return { total, assets };
 }
+
+// ─── Stealth Announcements ──────────────────────────────────────────────────
+export {
+  queryAnnouncements,
+  upsertAnnouncements,
+  type StealthAnnouncementRecord,
+  type AnnouncementQueryParams,
+  type AnnouncementPage,
+} from "./stealth/announcements";
+

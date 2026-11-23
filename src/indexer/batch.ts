@@ -36,6 +36,7 @@ import { enrichNftMetadata } from "./nft-metadata";
 import { isNftEvent, parseNftEvents, fetchNftMetadata } from "../ingester/nft";
 import { getTokenMetadata } from "../tokenCache";
 import { transfersStoredTotal } from "../metrics";
+import { isAnnouncementEvent, parseAnnouncementEvents, upsertAnnouncements } from "../stealth/announcements";
 import type { RawEvent } from "../rpc";
 import type { Network } from "../network";
 
@@ -49,11 +50,12 @@ export type BatchResult = {
   fungibleInserted: number;
   nftInserted: number;
   lpInserted: number;
+  announcementsInserted?: number;
 };
 
 /** Total rows newly stored by a batch, across every record type. */
 export function batchTotal(r: BatchResult): number {
-  return r.fungibleInserted + r.nftInserted + r.lpInserted;
+  return r.fungibleInserted + r.nftInserted + r.lpInserted + (r.announcementsInserted ?? 0);
 }
 
 /**
@@ -170,5 +172,13 @@ export async function processEventBatch(
     }
   }
 
-  return { fungibleInserted: inserted, nftInserted, lpInserted };
+  // ── Stealth Announcement path (#1320) ──────────────────────────────────────
+  const announcementRawEvents = events.filter(isAnnouncementEvent);
+  const announcementRecords   = parseAnnouncementEvents(announcementRawEvents);
+  const announcementsInserted = await upsertAnnouncements(announcementRecords, net).catch((e: unknown) => {
+    console.error(`[indexer/${net}] Announcement upsert failed:`, e);
+    return 0;
+  });
+
+  return { fungibleInserted: inserted, nftInserted, lpInserted, announcementsInserted };
 }

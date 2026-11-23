@@ -109,6 +109,30 @@ model HostFnLog {
   @@schema("wraith")
 }
 
+// ─── Stealth Announcements ───────────────────────────────────────────────────
+// Announcements emitted by stealth-announcer contracts (#1320).
+// Filterable by network, viewTag, and ledger range without revealing receiver keys.
+model StealthAnnouncement {
+  id                 Int      @id @default(autoincrement())
+  network            String   @default("testnet")
+  contractId         String
+  ledger             Int
+  ledgerClosedAt     DateTime
+  txHash             String
+  eventId            String
+  version            Int      @default(1)
+  viewTag            Int
+  ephemeralPublicKey String
+  sealedNote         String
+  createdAt          DateTime @default(now())
+
+  @@unique([network, eventId])
+  @@index([network, ledger])
+  @@index([network, viewTag])
+  @@index([network, viewTag, ledger])
+  @@schema("wraith")
+}
+
 // ─── NFT Transfers ────────────────────────────────────────────────────────────
 model NftTransfer {
   id             Int      @id @default(autoincrement())

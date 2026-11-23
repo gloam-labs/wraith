@@ -4193,6 +4193,238 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stealth/announcements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stealth payment announcement feed
+         * @description Queries stealth payment announcements by ledger range, filterable by a 1-byte view tag. Requests containing viewing keys, meta-addresses, or candidate recipient addresses are rejected to preserve receiver anonymity.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Network to read from. Defaults to the deployment's configured network. May also be sent as the X-Network header; the query parameter wins. */
+                    network?: "testnet" | "mainnet" | null;
+                    /** @description Starting ledger sequence (inclusive) */
+                    fromLedger?: number | null;
+                    /** @description Ending ledger sequence (inclusive) */
+                    toLedger?: number | null;
+                    /** @description One-byte view tag (0-255) to filter stealth announcements */
+                    viewTag?: number | null;
+                    /** @description Maximum number of announcements to return (default 50, max 200) */
+                    limit?: number | null;
+                    /** @description Opaque pagination cursor from a previous page */
+                    cursor?: string | null;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            announcements: {
+                                /** @description Unique database ID of the announcement */
+                                id: number;
+                                /** @description Announcer contract address (C...) */
+                                contractId: string;
+                                /** @description Ledger sequence where announcement was emitted */
+                                ledger: number;
+                                /**
+                                 * Format: date-time
+                                 * @description UTC close time of the ledger
+                                 */
+                                ledgerClosedAt: string;
+                                /** @description Transaction hash */
+                                txHash: string;
+                                /** @description Stellar RPC event ID */
+                                eventId: string;
+                                /** @description Announcement schema version (1) */
+                                version: number;
+                                /** @description One-byte view tag (0-255) */
+                                viewTag: number;
+                                /** @description 32-byte ephemeral public key (hex) */
+                                ephemeralPublicKey: string;
+                                /** @description Sealed note payload (hex) */
+                                sealedNote: string;
+                            }[];
+                            fromLedger: number;
+                            toLedger?: number;
+                            limit: number;
+                            nextCursor: string | null;
+                            hasMore: boolean;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        };
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        };
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/announcements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stealth payment announcement feed (alias)
+         * @description Queries stealth payment announcements by ledger range, filterable by a 1-byte view tag. Requests containing viewing keys, meta-addresses, or candidate recipient addresses are rejected to preserve receiver anonymity.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Network to read from. Defaults to the deployment's configured network. May also be sent as the X-Network header; the query parameter wins. */
+                    network?: "testnet" | "mainnet" | null;
+                    /** @description Starting ledger sequence (inclusive) */
+                    fromLedger?: number | null;
+                    /** @description Ending ledger sequence (inclusive) */
+                    toLedger?: number | null;
+                    /** @description One-byte view tag (0-255) to filter stealth announcements */
+                    viewTag?: number | null;
+                    /** @description Maximum number of announcements to return (default 50, max 200) */
+                    limit?: number | null;
+                    /** @description Opaque pagination cursor from a previous page */
+                    cursor?: string | null;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            announcements: {
+                                /** @description Unique database ID of the announcement */
+                                id: number;
+                                /** @description Announcer contract address (C...) */
+                                contractId: string;
+                                /** @description Ledger sequence where announcement was emitted */
+                                ledger: number;
+                                /**
+                                 * Format: date-time
+                                 * @description UTC close time of the ledger
+                                 */
+                                ledgerClosedAt: string;
+                                /** @description Transaction hash */
+                                txHash: string;
+                                /** @description Stellar RPC event ID */
+                                eventId: string;
+                                /** @description Announcement schema version (1) */
+                                version: number;
+                                /** @description One-byte view tag (0-255) */
+                                viewTag: number;
+                                /** @description 32-byte ephemeral public key (hex) */
+                                ephemeralPublicKey: string;
+                                /** @description Sealed note payload (hex) */
+                                sealedNote: string;
+                            }[];
+                            fromLedger: number;
+                            toLedger?: number;
+                            limit: number;
+                            nextCursor: string | null;
+                            hasMore: boolean;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        };
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        };
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {

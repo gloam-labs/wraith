@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma, upsertAccountSummaries } from "../db";
-import type { TransferRecord } from "../db";
+import type { TransferRecord, StealthAnnouncementRecord } from "../db";
 import type { NftTransferRecord } from "../ingester/nft";
 import type { HostFnRecord } from "./host-fn-log";
 import { resolveNetwork, type Network } from "../network";
@@ -23,6 +23,7 @@ export interface BatchPayload {
   transfers: TransferRecord[];
   nftTransfers: NftTransferRecord[];
   hostFnLogs: HostFnRecord[];
+  announcements?: StealthAnnouncementRecord[];
 }
 
 /**
@@ -78,6 +79,7 @@ export async function commitBatch(
   transferred: number;
   nftTransferred: number;
   hostFnLogs: number;
+  announcements: number;
 }> {
   // Stamped explicitly on every row. The column has a DEFAULT of 'testnet', so
   // omitting it compiles and silently files mainnet events under testnet —
@@ -129,6 +131,27 @@ export async function commitBatch(
         ).count
       : 0;
 
+    // Upsert stealth announcements (idempotent by (network, eventId)) (#1320)
+    const announcements = payload.announcements?.length
+      ? (
+          await tx.stealthAnnouncement.createMany({
+            data: payload.announcements.map((r) => ({
+              network: net,
+              contractId: r.contractId,
+              ledger: r.ledger,
+              ledgerClosedAt: r.ledgerClosedAt,
+              txHash: r.txHash,
+              eventId: r.eventId,
+              version: r.version,
+              viewTag: r.viewTag,
+              ephemeralPublicKey: r.ephemeralPublicKey,
+              sealedNote: r.sealedNote,
+            })),
+            skipDuplicates: true,
+          })
+        ).count
+      : 0;
+
     // Atomically advance the checkpoint. On reprocessing the same batchId,
     // this upsert will update the timestamp but keep the same lastLedger.
     await tx.indexerCheckpoint.upsert({
@@ -144,7 +167,7 @@ export async function commitBatch(
       },
     });
 
-    return { transferred, nftTransferred, hostFnLogs };
+    return { transferred, nftTransferred, hostFnLogs, announcements };
   });
 
   return result;

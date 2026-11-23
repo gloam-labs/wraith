@@ -84,6 +84,18 @@ export function resolveSacContractIds(network?: Network): string[] {
 }
 
 /**
+ * Resolve the list of stealth-announcer contract IDs to watch (#1320).
+ */
+export function resolveStealthAnnouncerContractIds(network?: Network): string[] {
+  const suffix = resolveNetwork(network).toUpperCase();
+  const raw =
+    process.env[`STEALTH_ANNOUNCER_CONTRACT_IDS_${suffix}`] ||
+    process.env.STEALTH_ANNOUNCER_CONTRACT_IDS ||
+    "";
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/**
  * Every contract a network's loop would ask the RPC for.
  *
  * Exists so the "is there anything to watch" question has one answer. An empty
@@ -92,7 +104,13 @@ export function resolveSacContractIds(network?: Network): string[] {
  * chain*. A loop must never be started with one.
  */
 export function resolveWatchedContractIds(network?: Network): string[] {
-  return [...new Set([...resolveSacContractIds(network), ...resolveNftContractIds(network)])];
+  return [
+    ...new Set([
+      ...resolveSacContractIds(network),
+      ...resolveNftContractIds(network),
+      ...resolveStealthAnnouncerContractIds(network),
+    ]),
+  ];
 }
 import { initTokenCache } from "./tokenCache";
 

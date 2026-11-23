@@ -7714,6 +7714,482 @@
           }
         }
       }
+    },
+    "/stealth/announcements": {
+      "get": {
+        "summary": "Stealth payment announcement feed",
+        "description": "Queries stealth payment announcements by ledger range, filterable by a 1-byte view tag. Requests containing viewing keys, meta-addresses, or candidate recipient addresses are rejected to preserve receiver anonymity.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "nullable": true,
+              "enum": [
+                "testnet",
+                "mainnet",
+                null
+              ],
+              "description": "Network to read from. Defaults to the deployment's configured network. May also be sent as the X-Network header; the query parameter wins.",
+              "example": "mainnet"
+            },
+            "required": false,
+            "description": "Network to read from. Defaults to the deployment's configured network. May also be sent as the X-Network header; the query parameter wins.",
+            "name": "network",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "description": "Starting ledger sequence (inclusive)",
+              "example": 1000
+            },
+            "required": false,
+            "description": "Starting ledger sequence (inclusive)",
+            "name": "fromLedger",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "description": "Ending ledger sequence (inclusive)"
+            },
+            "required": false,
+            "description": "Ending ledger sequence (inclusive)",
+            "name": "toLedger",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "description": "One-byte view tag (0-255) to filter stealth announcements"
+            },
+            "required": false,
+            "description": "One-byte view tag (0-255) to filter stealth announcements",
+            "name": "viewTag",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "description": "Maximum number of announcements to return (default 50, max 200)"
+            },
+            "required": false,
+            "description": "Maximum number of announcements to return (default 50, max 200)",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "nullable": true,
+              "description": "Opaque pagination cursor from a previous page"
+            },
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page",
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "announcements": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "Unique database ID of the announcement"
+                          },
+                          "contractId": {
+                            "type": "string",
+                            "description": "Announcer contract address (C...)"
+                          },
+                          "ledger": {
+                            "type": "integer",
+                            "description": "Ledger sequence where announcement was emitted"
+                          },
+                          "ledgerClosedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "UTC close time of the ledger"
+                          },
+                          "txHash": {
+                            "type": "string",
+                            "description": "Transaction hash"
+                          },
+                          "eventId": {
+                            "type": "string",
+                            "description": "Stellar RPC event ID"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "description": "Announcement schema version (1)"
+                          },
+                          "viewTag": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255,
+                            "description": "One-byte view tag (0-255)"
+                          },
+                          "ephemeralPublicKey": {
+                            "type": "string",
+                            "description": "32-byte ephemeral public key (hex)"
+                          },
+                          "sealedNote": {
+                            "type": "string",
+                            "description": "Sealed note payload (hex)"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "contractId",
+                          "ledger",
+                          "ledgerClosedAt",
+                          "txHash",
+                          "eventId",
+                          "version",
+                          "viewTag",
+                          "ephemeralPublicKey",
+                          "sealedNote"
+                        ],
+                        "description": "Stealth payment announcement"
+                      }
+                    },
+                    "fromLedger": {
+                      "type": "integer"
+                    },
+                    "toLedger": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "announcements",
+                    "fromLedger",
+                    "limit",
+                    "nextCursor",
+                    "hasMore"
+                  ],
+                  "description": "Feed of stealth payment announcements"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/announcements": {
+      "get": {
+        "summary": "Stealth payment announcement feed (alias)",
+        "description": "Queries stealth payment announcements by ledger range, filterable by a 1-byte view tag. Requests containing viewing keys, meta-addresses, or candidate recipient addresses are rejected to preserve receiver anonymity.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "nullable": true,
+              "enum": [
+                "testnet",
+                "mainnet",
+                null
+              ],
+              "description": "Network to read from. Defaults to the deployment's configured network. May also be sent as the X-Network header; the query parameter wins.",
+              "example": "mainnet"
+            },
+            "required": false,
+            "description": "Network to read from. Defaults to the deployment's configured network. May also be sent as the X-Network header; the query parameter wins.",
+            "name": "network",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "description": "Starting ledger sequence (inclusive)",
+              "example": 1000
+            },
+            "required": false,
+            "description": "Starting ledger sequence (inclusive)",
+            "name": "fromLedger",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "description": "Ending ledger sequence (inclusive)"
+            },
+            "required": false,
+            "description": "Ending ledger sequence (inclusive)",
+            "name": "toLedger",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "description": "One-byte view tag (0-255) to filter stealth announcements"
+            },
+            "required": false,
+            "description": "One-byte view tag (0-255) to filter stealth announcements",
+            "name": "viewTag",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "description": "Maximum number of announcements to return (default 50, max 200)"
+            },
+            "required": false,
+            "description": "Maximum number of announcements to return (default 50, max 200)",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "nullable": true,
+              "description": "Opaque pagination cursor from a previous page"
+            },
+            "required": false,
+            "description": "Opaque pagination cursor from a previous page",
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "announcements": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "Unique database ID of the announcement"
+                          },
+                          "contractId": {
+                            "type": "string",
+                            "description": "Announcer contract address (C...)"
+                          },
+                          "ledger": {
+                            "type": "integer",
+                            "description": "Ledger sequence where announcement was emitted"
+                          },
+                          "ledgerClosedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "UTC close time of the ledger"
+                          },
+                          "txHash": {
+                            "type": "string",
+                            "description": "Transaction hash"
+                          },
+                          "eventId": {
+                            "type": "string",
+                            "description": "Stellar RPC event ID"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "description": "Announcement schema version (1)"
+                          },
+                          "viewTag": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255,
+                            "description": "One-byte view tag (0-255)"
+                          },
+                          "ephemeralPublicKey": {
+                            "type": "string",
+                            "description": "32-byte ephemeral public key (hex)"
+                          },
+                          "sealedNote": {
+                            "type": "string",
+                            "description": "Sealed note payload (hex)"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "contractId",
+                          "ledger",
+                          "ledgerClosedAt",
+                          "txHash",
+                          "eventId",
+                          "version",
+                          "viewTag",
+                          "ephemeralPublicKey",
+                          "sealedNote"
+                        ],
+                        "description": "Stealth payment announcement"
+                      }
+                    },
+                    "fromLedger": {
+                      "type": "integer"
+                    },
+                    "toLedger": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "announcements",
+                    "fromLedger",
+                    "limit",
+                    "nextCursor",
+                    "hasMore"
+                  ],
+                  "description": "Feed of stealth payment announcements"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

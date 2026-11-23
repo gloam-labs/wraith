@@ -22,6 +22,7 @@ import { createGraphQLMiddleware } from "./graphql/server";
 import { createPopularAssetsRouter } from "./routes/assets/popular";
 import { createExportsRouter } from "./routes/exports";
 import { createSearchRouter } from "./routes/search";
+import { createAnnouncementsRouter } from "./routes/announcements";
 import { cacheMiddleware, cacheStatus } from "./cache/redis";
 import {
   hostFnQuerySchema,
@@ -316,6 +317,11 @@ export function createApp(): express.Application {
 
   // ─── Fuzzy search across accounts, assets, and contracts ──────────────────
   app.use("/search", cacheMiddleware({ ttlMs: SEARCH_CACHE_TTL_MS }), createSearchRouter());
+
+  // ─── Stealth Announcements (#1320) ─────────────────────────────────────────
+  const announcementsRouter = createAnnouncementsRouter();
+  app.use("/stealth/announcements", announcementsRouter);
+  app.use("/announcements", announcementsRouter);
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
   const parseIntParam = (val: unknown, fallback: number): number => {

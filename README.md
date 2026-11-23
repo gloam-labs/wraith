@@ -903,6 +903,7 @@ type, no `data` envelope:
 
 | Endpoint | Notes |
 |----------|-------|
+| `GET /stealth/announcements` | Stealth payment announcement feed filterable by ledger range and 1-byte view tag; see [docs/STEALTH_SCANNING.md](docs/STEALTH_SCANNING.md) |
 | `GET /tokens` | Cached token metadata for the selected network |
 | `GET /transfers.csv` | Full-set CSV export (no pagination) |
 | `GET /transfers.parquet` | Full-set Parquet export (no pagination) |

@@ -72,6 +72,8 @@ import {
   discordLinkCodeResponseSchema,
   discordLinkRequestSchema,
   discordLinkResponseSchema,
+  announcementsQuerySchema,
+  announcementsResponseSchema,
 } from "./schemas";
 
 const registry = new OpenAPIRegistry();
@@ -755,6 +757,42 @@ if (getOhlcRefreshIntervalMs() !== undefined) {
     },
   });
 }
+
+registry.registerPath({
+  method: "get",
+  path: "/stealth/announcements",
+  summary: "Stealth payment announcement feed",
+  description:
+    "Queries stealth payment announcements by ledger range, filterable by a 1-byte view tag. Requests containing viewing keys, meta-addresses, or candidate recipient addresses are rejected to preserve receiver anonymity.",
+  request: {
+    query: announcementsQuerySchema,
+  },
+  responses: {
+    200: {
+      description: "OK",
+      content: { "application/json": { schema: announcementsResponseSchema } },
+    },
+    ...commonErrorResponses,
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/announcements",
+  summary: "Stealth payment announcement feed (alias)",
+  description:
+    "Queries stealth payment announcements by ledger range, filterable by a 1-byte view tag. Requests containing viewing keys, meta-addresses, or candidate recipient addresses are rejected to preserve receiver anonymity.",
+  request: {
+    query: announcementsQuerySchema,
+  },
+  responses: {
+    200: {
+      description: "OK",
+      content: { "application/json": { schema: announcementsResponseSchema } },
+    },
+    ...commonErrorResponses,
+  },
+});
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 const document = generator.generateDocument({
