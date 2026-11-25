@@ -566,6 +566,7 @@ last_indexed_ledger{network="mainnet"} 5842100
 | `transfers_stored_total` | counter | `network`, `type` | Rows persisted, split `fungible` / `nft` — one parse path can break while the other keeps working. |
 | `rpc_errors_total` | counter | `outcome` | Failed RPC attempts. `retry` counts attempts `withRetry` absorbed, `exhausted` counts calls that gave up — a degrading endpoint shows up in `retry` long before it fails a call. |
 | `events_skipped_total` | counter | `reason` | Events the decoder dropped. `unrecognised` is non-token events (normal); `malformed` is token events that failed to decode — a rising rate points at a non-standard contract or a decoder bug. |
+| `webhook_amount_skipped_total` | counter | `reason` | Webhook `amountNGN` values discarded. `implausible` is a number outside the accepted band; `unparseable` is neither a number nor a plain decimal string. The event's status is still applied, so this counts lost amounts, not lost events. Any sustained rate means the provider's amount format or scale has changed. |
 | `last_indexed_ledger` | gauge | `network` | Highest committed ledger. Against the chain tip, this is lag. |
 | `db_query_duration_seconds` | histogram | `operation` | Duration of instrumented DB operations, failures included. |
 | `http_requests_total` | counter | `method`, `route`, `status` | HTTP requests served. `route` is the Express route *pattern*, never the raw URL, so addresses never become label values; an unmatched request reports `route="unknown"`. |

@@ -3,15 +3,14 @@ import express, { Request, Response, Router } from "express";
 import {
   SIGNATURE_HEADER,
   parseEvent,
+  readWebhookAmountNgn,
   resolveEventNetwork,
   verifySignature,
-  isPlausibleNgn,
-  MIN_PLAUSIBLE_NGN,
-  MAX_PLAUSIBLE_NGN,
 } from "../linq/webhook";
 import { recordMoneyFailure } from "../linq/moneyFailures";
 import { reconcileNgnOrder } from "../linq/ngnOrders";
 import { reconcileOfframpOrder } from "../linq/offrampOrders";
+import { webhookAmountSkippedTotal } from "../metrics";
 import { DEFAULT_NETWORK } from "../network";
 
 /**
@@ -70,21 +69,26 @@ export function createLinqWebhookRouter(): Router {
       res.status(200).json({ ok: true });
 
       try {
-        // Amount/ratio guard: reject values that cannot be an amount at all
-        // before touching the order store. The floor (MIN_PLAUSIBLE_NGN = 0)
-        // only blocks non-positive amounts, so low-value airtime top-ups pass
-        // through.
+        // Amount guard: an amount that cannot be used is dropped, but the event
+        // is not. A failed order reported with a bad amount is still a failed
+        // order, so its status is applied below with no amount. The amount is
+        // counted and logged, so the loss is visible rather than silent.
         //
-        // This band cannot catch a scale error, because the router has the
+        // The band cannot catch a scale error, because the router has the
         // webhook but not the order row: a 100x drift on a small order stays
         // well inside the band. That comparison needs both numbers and so
         // lives in reconcileNgnOrder, where the stored amount is loaded.
-        if (event.amountNGN != null && !isPlausibleNgn(event.amountNGN)) {
+        const amount = readWebhookAmountNgn(event.amountNGN);
+        if (amount.skipped) {
+          webhookAmountSkippedTotal.inc({ reason: amount.skipped });
           console.error(
-            `[linq] rejecting webhook for order ${event.orderId}: amountNGN ${event.amountNGN} outside plausible band [${MIN_PLAUSIBLE_NGN}, ${MAX_PLAUSIBLE_NGN}]`,
+            `[linq] dropping amountNGN ${String(event.amountNGN)} from webhook for order ${event.orderId} (${amount.skipped}); status still applied`,
           );
-          return;
         }
+        // Built once, with the amount replaced. Both reconcilers write
+        // settledNGN whenever amountNGN is present, so an unusable amount must
+        // be absent here, not merely ignored.
+        const reconcilable = { ...event, amountNGN: amount.amountNGN };
 
         // Idempotent per event: the update targets a row keyed on
         // (network, orderId) and writes the settled figures. A redelivery of
@@ -106,10 +110,10 @@ export function createLinqWebhookRouter(): Router {
 
         // Same reconciliation the periodic sweep uses, so a webhook that
         // arrives late and a poll that arrives first cannot disagree.
-        if (await reconcileOfframpOrder(event)) return;
+        if (await reconcileOfframpOrder(reconcilable)) return;
 
         // Not an offramp order — try the onramp/bill table before giving up.
-        if (await reconcileNgnOrder(event)) return;
+        if (await reconcileNgnOrder(reconcilable)) return;
         console.warn(`[linq] webhook for unknown order ${event.orderId}`);
       } catch (err) {
         // The response has already gone, so this cannot fail the delivery.
