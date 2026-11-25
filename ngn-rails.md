@@ -453,6 +453,47 @@ through unchanged** — that is Linq telling us something true about the request
 (an unverified customer, an order that is not yours), and papering over it with
 a last-known row would turn "this order is not yours" into a status page.
 
+**The stale body has the live answer's shape.** It is built field by field in
+the live field names for the rail — never by spreading the record, whose
+column names (`amountNGN`, `kind`, …) are not the provider's and which carries
+fields no caller should receive (`walletAddress`, `rate`, the settled amounts,
+`txHash`). Fields the record does not hold are left out, not invented.
+
+A stale bill (`GET /ngn/bills/:orderId`):
+
+```json
+{ "orderId": "…", "customerRef": "…",
+  "status": "settled (completed)", "providerStatus": "settled",
+  "billCategory": "airtime",
+  "amountNgn": 1000, "amountStableCoin": 0.75,
+  "updated": "2026-10-02T18:00:00.000Z",
+  "stale": true, "reason": "Linq is unreachable; this is our last known status" }
+```
+
+- `status` is translated exactly as the live route translates it
+  (`billStatusForClients`), so a bill recorded as `settled` still ends the
+  bills screen's wait; the recorded word is kept as `providerStatus`.
+- The deposit `wallet`, `description` and `created` exist only in the
+  provider's answer and are omitted. The address the record holds for a bill
+  is the *refund* address, so it is not sent as `wallet`.
+- `updated` is the record's last update, in the live answer's name.
+
+A stale onramp order (`GET /ngn/onramp/orders/:orderId`):
+
+```json
+{ "orderId": "…", "customerRef": "…",
+  "status": "settled", "providerStatus": "settled",
+  "amount": 6, "amountNgn": 8137,
+  "stale": true, "reason": "Linq is unreachable; this is our last known status" }
+```
+
+- `status` is the recorded word, as the live onramp route sends it, with the
+  same word as `providerStatus`.
+- `amount` is the stablecoin amount under the live status answer's name (the
+  record calls it `amountStableCoin`).
+- The bank details (`bankName`, `accountNumber`, `accountName`) exist only in
+  the provider's answer and are omitted.
+
 Recording happens *after* the response is sent and never throws. The user is
 holding bank details or a deposit address they need; our bookkeeping must not
 stand between them and that. If the write fails, it is logged loudly and the
