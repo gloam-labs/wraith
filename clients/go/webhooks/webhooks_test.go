@@ -16,6 +16,7 @@ func TestList(t *testing.T) {
 			t.Errorf("path = %q", r.URL.Path)
 		}
 		w.Header().Set("content-type", "application/json")
+		// Real API shape: filter is null when not set.
 		_, _ = w.Write([]byte(`{"subscriptions":[{"id":1,"url":"https://h","filter":null,"active":true,"createdAt":"t","updatedAt":"t"}]}`))
 	}))
 	defer srv.Close()
@@ -27,6 +28,45 @@ func TestList(t *testing.T) {
 	}
 	if len(list.Subscriptions) != 1 || list.Subscriptions[0].ID != 1 || !list.Subscriptions[0].Active {
 		t.Errorf("unexpected list: %+v", list)
+	}
+	if list.Subscriptions[0].Filter != nil {
+		t.Errorf("filter = %v, want nil", list.Subscriptions[0].Filter)
+	}
+}
+
+// TestListWithFilter verifies that a subscription whose filter field is an
+// object (not null) decodes into a *WebhookFilter correctly. The old *string
+// type could not decode this and returned an error on every real server.
+func TestListWithFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		// Real API: filter is an object with contract/from/to/min_amount fields.
+		_, _ = w.Write([]byte(`{"subscriptions":[
+			{"id":2,"url":"https://h","filter":{"contract":"CABC","min_amount":"1000000"},"active":true,"createdAt":"t","updatedAt":"t"}
+		]}`))
+	}))
+	defer srv.Close()
+
+	c := webhooks.New(wraith.New(srv.URL))
+	list, err := c.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list.Subscriptions) != 1 {
+		t.Fatalf("want 1 subscription, got %d", len(list.Subscriptions))
+	}
+	f := list.Subscriptions[0].Filter
+	if f == nil {
+		t.Fatal("filter = nil, want object")
+	}
+	if f.Contract == nil || *f.Contract != "CABC" {
+		t.Errorf("filter.contract = %v, want CABC", f.Contract)
+	}
+	if f.MinAmount == nil || *f.MinAmount != "1000000" {
+		t.Errorf("filter.min_amount = %v, want 1000000", f.MinAmount)
+	}
+	if f.From != nil || f.To != nil {
+		t.Errorf("unexpected filter fields set: from=%v to=%v", f.From, f.To)
 	}
 }
 

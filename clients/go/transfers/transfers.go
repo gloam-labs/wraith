@@ -34,26 +34,39 @@ type Transfer struct {
 }
 
 // Page is a page of transfers plus pagination metadata.
+//
+// Breaking change (v2): Total is now *int rather than int. The API only
+// returns total when the caller sets includeTotal=true; an absent field is
+// meaningfully different from zero, so a pointer is the correct type. Code
+// that previously read page.Total unconditionally should now check for nil.
 type Page struct {
 	Transfers  []Transfer `json:"transfers"`
-	Total      int        `json:"total"`
+	HasMore    bool       `json:"hasMore"`
+	Total      *int       `json:"total,omitempty"`
 	Limit      int        `json:"limit"`
 	Offset     int        `json:"offset"`
 	NextCursor *string    `json:"nextCursor"`
 }
 
+// byTxResponse is the wire shape of GET /transfers/tx/{txHash}.
+// The API wraps the array in an object: {"transfers":[...]}.
+type byTxResponse struct {
+	Transfers []Transfer `json:"transfers"`
+}
+
 // ListParams holds the optional filters shared by the transfer list endpoints.
 type ListParams struct {
-	ContractID string
-	Token      string
-	EventType  []string
-	FromLedger *int
-	ToLedger   *int
-	FromDate   string
-	ToDate     string
-	Limit      *int
-	Offset     *int
-	Cursor     string
+	ContractID   string
+	Token        string
+	EventType    []string
+	FromLedger   *int
+	ToLedger     *int
+	FromDate     string
+	ToDate       string
+	Limit        *int
+	Offset       *int
+	Cursor       string
+	IncludeTotal bool
 }
 
 func (p *ListParams) Query() url.Values {
@@ -71,6 +84,9 @@ func (p *ListParams) Query() url.Values {
 	wraith.AddInt(q, "limit", p.Limit)
 	wraith.AddInt(q, "offset", p.Offset)
 	wraith.AddString(q, "cursor", p.Cursor)
+	if p.IncludeTotal {
+		q.Set("includeTotal", "true")
+	}
 	return q
 }
 
@@ -102,10 +118,11 @@ func (t *Client) ForAddress(ctx context.Context, address string, params *ListPar
 }
 
 // ByTx returns the transfers in a single transaction (GET /transfers/tx/{txHash}).
+// The API returns {"transfers":[...]}; this unwraps that envelope.
 func (t *Client) ByTx(ctx context.Context, txHash string) ([]Transfer, error) {
-	var transfers []Transfer
-	if err := t.c.Get(ctx, "/transfers/tx/"+url.PathEscape(txHash), nil, &transfers); err != nil {
+	var resp byTxResponse
+	if err := t.c.Get(ctx, "/transfers/tx/"+url.PathEscape(txHash), nil, &resp); err != nil {
 		return nil, err
 	}
-	return transfers, nil
+	return resp.Transfers, nil
 }

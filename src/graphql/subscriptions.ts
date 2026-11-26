@@ -45,7 +45,8 @@ export const SUBSCRIPTIONS_PATH = "/graphql/subscriptions";
 
 // Refuse to enqueue more data on an already-saturated socket — the client
 // simply misses the update rather than the server buffering it forever.
-const MAX_BUFFERED_BYTES = 1_000_000;
+// Exported so the plain-WS server (ws.ts) uses the same threshold.
+export const MAX_BUFFERED_BYTES = 1_000_000;
 
 // How long to wait before telling a client how many messages it missed. Long
 // enough that a burst of drops collapses into one notice.

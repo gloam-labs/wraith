@@ -17,14 +17,24 @@ type Client struct {
 // New returns a webhooks client backed by a shared *wraith.Client.
 func New(c *wraith.Client) *Client { return &Client{c: c} }
 
+// WebhookFilter mirrors the filter object in webhookFilterSchema.
+// All fields are optional; a nil pointer means the field was absent.
+// The whole Filter on a Subscription is *WebhookFilter — nil means no filter.
+type WebhookFilter struct {
+	Contract  *string `json:"contract,omitempty"`
+	From      *string `json:"from,omitempty"`
+	To        *string `json:"to,omitempty"`
+	MinAmount *string `json:"min_amount,omitempty"`
+}
+
 // Subscription is a registered webhook subscription.
 type Subscription struct {
-	ID        int64   `json:"id"`
-	URL       string  `json:"url"`
-	Filter    *string `json:"filter"`
-	Active    bool    `json:"active"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt string  `json:"updatedAt"`
+	ID        int64          `json:"id"`
+	URL       string         `json:"url"`
+	Filter    *WebhookFilter `json:"filter"`
+	Active    bool           `json:"active"`
+	CreatedAt string         `json:"createdAt"`
+	UpdatedAt string         `json:"updatedAt"`
 }
 
 // SubscriptionList is the /webhooks response.

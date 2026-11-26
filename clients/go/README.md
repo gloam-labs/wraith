@@ -53,6 +53,10 @@ func main() {
 	for _, t := range page.Transfers {
 		fmt.Println(t.ContractID, t.Amount, t.EventType)
 	}
+	// Check whether another page exists before fetching more.
+	if page.HasMore && page.NextCursor != nil {
+		fmt.Println("next cursor:", *page.NextCursor)
+	}
 
 	// Most-active assets.
 	ac := assets.New(c)
@@ -125,6 +129,52 @@ balance can differ from the on-chain balance.
 | `hostfn`    | `hostfn.New(c)`       | `Logs`                                        |
 
 Options: `wraith.WithHTTPClient(*http.Client)` and `wraith.WithHeader(k, v)`.
+
+## Breaking changes
+
+### `transfers.Page.Total` is now `*int`
+
+The API only returns `total` when the caller passes `includeTotal=true`. An
+absent field is meaningfully different from zero — returning 0 previously
+meant both "not requested" and "no results". Code that read `page.Total`
+unconditionally should now check for nil:
+
+```go
+page, _ := tc.Incoming(ctx, addr, &transfers.ListParams{IncludeTotal: true})
+if page.Total != nil {
+    fmt.Println("total:", *page.Total)
+}
+```
+
+### `transfers.Page.HasMore` added
+
+The primary pagination signal. The API always returns `hasMore`; `Total` is
+only present when explicitly requested and is slower to compute.
+
+### `webhooks.Subscription.Filter` is now `*WebhookFilter`
+
+Previously `*string`, which could not decode the actual filter object the API
+returns. Any subscription with a filter set would fail to decode before this
+fix. The new type is:
+
+```go
+type WebhookFilter struct {
+    Contract  *string `json:"contract,omitempty"`
+    From      *string `json:"from,omitempty"`
+    To        *string `json:"to,omitempty"`
+    MinAmount *string `json:"min_amount,omitempty"`
+}
+```
+
+A `nil` `Filter` on a `Subscription` means no filter is configured (the API
+returns `"filter": null`).
+
+### `status.Status` now includes `Status`, `Network`, and `Networks`
+
+The `/status` response has always included these fields; the struct was
+missing them. `LastIndexedLedger`, `LatestLedger`, and `LagLedgers` are now
+`*int64` (nullable) to match the API spec — the server can return `null` for
+these when the indexer has not committed a ledger yet.
 
 ## Development
 

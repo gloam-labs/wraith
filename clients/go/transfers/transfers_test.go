@@ -23,8 +23,9 @@ func TestIncoming(t *testing.T) {
 			t.Errorf("contractId = %q, want CABC", q.Get("contractId"))
 		}
 		w.Header().Set("content-type", "application/json")
+		// Real API shape: hasMore always present, total absent unless includeTotal=true.
 		_, _ = w.Write([]byte(`{
-			"total":1,"limit":50,"offset":0,"nextCursor":null,
+			"hasMore":false,"limit":50,"offset":0,"nextCursor":null,
 			"transfers":[{"id":1,"contractId":"CABC","eventType":"transfer",
 			"fromAddress":"GFROM","toAddress":"GABC","amount":"100",
 			"displayAmount":"0.0000100","ledger":10,"ledgerClosedAt":"2026-01-01T00:00:00Z",
@@ -40,8 +41,12 @@ func TestIncoming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Incoming: %v", err)
 	}
-	if page.Total != 1 || len(page.Transfers) != 1 {
+	if page.HasMore != false || len(page.Transfers) != 1 {
 		t.Fatalf("unexpected page: %+v", page)
+	}
+	// total is absent when includeTotal was not requested
+	if page.Total != nil {
+		t.Errorf("total = %v, want nil (not requested)", page.Total)
 	}
 	tr := page.Transfers[0]
 	if tr.ContractID != "CABC" || tr.Amount != "100" || tr.EventType != "transfer" {
@@ -49,13 +54,38 @@ func TestIncoming(t *testing.T) {
 	}
 }
 
-func TestByTxReturnsArray(t *testing.T) {
+func TestIncomingWithTotal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("includeTotal") != "true" {
+			t.Errorf("includeTotal not set")
+		}
+		w.Header().Set("content-type", "application/json")
+		// Real API shape when includeTotal=true: total is present.
+		_, _ = w.Write([]byte(`{"hasMore":false,"total":3,"limit":50,"offset":0,"nextCursor":null,"transfers":[]}`))
+	}))
+	defer srv.Close()
+
+	c := transfers.New(wraith.New(srv.URL))
+	page, err := c.Incoming(context.Background(), "GABC", &transfers.ListParams{IncludeTotal: true})
+	if err != nil {
+		t.Fatalf("Incoming: %v", err)
+	}
+	if page.Total == nil || *page.Total != 3 {
+		t.Errorf("total = %v, want 3", page.Total)
+	}
+}
+
+// TestByTxDecodesObject verifies that ByTx decodes the real API response shape:
+// {"transfers":[...]}. The old test sent a bare array which the real server
+// never returns.
+func TestByTxDecodesObject(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/transfers/tx/abc123" {
 			t.Errorf("path = %q", r.URL.Path)
 		}
 		w.Header().Set("content-type", "application/json")
-		_, _ = w.Write([]byte(`[{"id":1,"contractId":"CABC","eventType":"mint","amount":"5","ledger":1,"ledgerClosedAt":"t","txHash":"abc123","eventId":"e1"}]`))
+		// Real API: object with a "transfers" key, not a bare array.
+		_, _ = w.Write([]byte(`{"transfers":[{"id":1,"contractId":"CABC","eventType":"mint","fromAddress":null,"toAddress":"GABC","amount":"5","displayAmount":"0.0000005","ledger":1,"ledgerClosedAt":"2026-01-01T00:00:00Z","txHash":"abc123","eventId":"e1"}]}`))
 	}))
 	defer srv.Close()
 
@@ -97,7 +127,8 @@ func TestOutgoingAndForAddress(t *testing.T) {
 					t.Errorf("path = %q, want %q", r.URL.Path, tc.wantPath)
 				}
 				w.Header().Set("content-type", "application/json")
-				_, _ = w.Write([]byte(`{"total":0,"limit":50,"offset":0,"nextCursor":null,"transfers":[]}`))
+				// Real API shape: hasMore is always present, total is absent.
+				_, _ = w.Write([]byte(`{"hasMore":false,"limit":50,"offset":0,"nextCursor":null,"transfers":[]}`))
 			}))
 			defer srv.Close()
 
