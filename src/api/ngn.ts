@@ -86,6 +86,29 @@ function isConfigured(): boolean {
  * The answer is marked `stale: true` so a client cannot mistake a last-known
  * status for a live one. A bill that was `initiated` when we last heard is not
  * evidence that it still is.
+ *
+ * The body is built **field by field, in the live answer's field names** for
+ * the rail — never by spreading the record. The record's own column names
+ * (`amountNGN`, `kind`, `billCategory` on an onramp, …) are not the provider's
+ * names, and the record carries things no caller should receive
+ * (`walletAddress`, `rate`, the settled amounts, `txHash`). A client written
+ * against the live shape must be able to read the stale one unchanged:
+ *
+ * - a bill's `status` goes through {@link billStatusForClients}, exactly as
+ *   the live route translates it, with the recorded word kept as
+ *   `providerStatus`. Without that, a bill we recorded as `settled` was sent
+ *   as `settled` — a word the bills screen does not end on — so a delivered
+ *   top-up showed as still waiting precisely while the provider was down.
+ * - an onramp's `status` is sent as recorded, as the live route sends it,
+ *   also with `providerStatus` alongside.
+ * - fields the record does not hold are **left out, not invented**: an
+ *   onramp's bank details and a bill's deposit `wallet`, `description` and
+ *   `created` exist only in the provider's answer. (The address we do hold
+ *   for a bill is the *refund* address, which is not the deposit `wallet`,
+ *   so it is not sent under that name.)
+ * - the record's amounts are strings; the live answers carry numbers, so
+ *   they are converted — the same `Number(...)` the offramp's stale answer
+ *   uses for its row.
  */
 async function fallbackToRecordedOrder(
   res: Response,
@@ -93,13 +116,43 @@ async function fallbackToRecordedOrder(
   network: string,
   customerRef: string,
   orderId: string,
+  kind: "bill" | "onramp",
 ): Promise<boolean> {
   if (!(err instanceof LinqError) || err.status < 500) return false;
 
   const recorded = await findNgnOrder(network, customerRef, orderId).catch(() => null);
   if (!recorded) return false;
 
-  res.json({ ...recorded, stale: true, reason: "Linq is unreachable; this is our last known status" });
+  const reason = "Linq is unreachable; this is our last known status";
+
+  if (kind === "bill") {
+    res.json({
+      orderId: recorded.orderId,
+      customerRef: recorded.customerRef,
+      status: billStatusForClients(recorded.status),
+      providerStatus: recorded.status,
+      ...(recorded.billCategory ? { billCategory: recorded.billCategory } : {}),
+      amountNgn: Number(recorded.amountNGN),
+      amountStableCoin: Number(recorded.amountStableCoin),
+      ...(recorded.updatedAt ? { updated: new Date(recorded.updatedAt).toISOString() } : {}),
+      stale: true,
+      reason,
+    });
+    return true;
+  }
+
+  res.json({
+    orderId: recorded.orderId,
+    customerRef: recorded.customerRef,
+    status: recorded.status,
+    providerStatus: recorded.status,
+    // Linq's onramp status names the stablecoin amount `amount`; the record
+    // calls it `amountStableCoin`. The live name wins.
+    amount: Number(recorded.amountStableCoin),
+    amountNgn: Number(recorded.amountNGN),
+    stale: true,
+    reason,
+  });
   return true;
 }
 
@@ -900,7 +953,7 @@ export function createNgnRouter(
       });
       res.json(live);
     } catch (err) {
-      if (await fallbackToRecordedOrder(res, err, requestNetwork(req), customerRef, req.params.orderId as string)) {
+      if (await fallbackToRecordedOrder(res, err, requestNetwork(req), customerRef, req.params.orderId as string, "onramp")) {
         return;
       }
       sendLinqError(res, err);
@@ -1024,7 +1077,7 @@ export function createNgnRouter(
       // top-up spinning forever. See billStatusForClients.
       res.json({ ...live, status: billStatusForClients(live.status), providerStatus: live.status });
     } catch (err) {
-      if (await fallbackToRecordedOrder(res, err, requestNetwork(req), customerRef, req.params.orderId as string)) {
+      if (await fallbackToRecordedOrder(res, err, requestNetwork(req), customerRef, req.params.orderId as string, "bill")) {
         return;
       }
       sendLinqError(res, err);

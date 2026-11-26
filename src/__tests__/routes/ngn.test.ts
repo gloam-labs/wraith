@@ -754,6 +754,176 @@ describe("falling back to our own record", () => {
     expect(res.body.status).toBe("initiated");
   });
 
+  // The record as `findNgnOrder` returns it: our column names, amounts as
+  // strings, and fields no caller should receive. Plainly fake throughout.
+  const recordedBill = (status: string) => ({
+    orderId: "9e4b1f2a",
+    customerRef: "u",
+    walletAddress: G_ADDRESS,
+    status,
+    kind: "bill",
+    coin: "xlm",
+    amountStableCoin: "0.75",
+    amountNGN: "1000",
+    rate: "1333",
+    billCategory: "airtime",
+    provider: "MTN",
+    settledStableCoin: null,
+    settledNGN: null,
+    txHash: null,
+    updatedAt: new Date("2026-10-02T18:00:00Z"),
+  });
+
+  it("sends a settled bill with a status the bills screen ends on", async () => {
+    (getBillStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 502));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("settled"));
+
+    const res = await mainnet(request(makeApp()).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.stale).toBe(true);
+    // `settled` is not a word the bills screen ends on; the live route
+    // translates it, so the stale one must too — with the provider's own
+    // word kept alongside.
+    expect(res.body.status).toBe("settled (completed)");
+    expect(res.body.providerStatus).toBe("settled");
+    // The fallback is looked up under the request's own reference: a record
+    // belonging to another customerRef comes back null from findNgnOrder
+    // and is never returned.
+    expect(findNgnOrder).toHaveBeenCalledWith("mainnet", "u", "9e4b1f2a");
+  });
+
+  // The exact stale bill body: the live field names we hold, plus the stale
+  // markers. Nothing from the record's own vocabulary rides along.
+  const recordedBillKeys = [
+    "orderId",
+    "customerRef",
+    "status",
+    "providerStatus",
+    "billCategory",
+    "amountNgn",
+    "amountStableCoin",
+    "updated",
+    "stale",
+    "reason",
+  ];
+
+  it("sends a failed bill with a status the bills screen ends on", async () => {
+    (getBillStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 504));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("refunded"));
+
+    const res = await mainnet(request(makeApp()).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("refunded (failed)");
+    expect(res.body.providerStatus).toBe("refunded");
+    expect(Object.keys(res.body).sort()).toEqual([...recordedBillKeys].sort());
+  });
+
+  it("builds the stale bill body field by field, in the live field names", async () => {
+    (getBillStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 502));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("settled"));
+
+    const res = await mainnet(request(makeApp()).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+
+    expect(Object.keys(res.body).sort()).toEqual([...recordedBillKeys].sort());
+    // Amounts arrive as numbers, as the live answer carries them — not as
+    // the record's strings under the record's capitalisation.
+    expect(res.body.amountNgn).toBe(1000);
+    expect(res.body.amountStableCoin).toBe(0.75);
+    expect(res.body.updated).toBe("2026-10-02T18:00:00.000Z");
+    // The record's internal fields are not sent: no refund address under any
+    // name, no rate, no settled amounts, no hash.
+    expect(JSON.stringify(res.body)).not.toContain(G_ADDRESS);
+    for (const leaked of ["walletAddress", "kind", "coin", "rate", "provider", "settledNGN", "settledStableCoin", "txHash", "amountNGN", "updatedAt"]) {
+      expect(res.body[leaked]).toBeUndefined();
+    }
+  });
+
+  it("gives the stale bill the live answer's field names", async () => {
+    const app = makeApp();
+    (getBillStatus as jest.Mock).mockResolvedValue({
+      orderId: "9e4b1f2a",
+      customerRef: "u",
+      status: "settled",
+      billCategory: "airtime",
+      amountNgn: 1000,
+      amountStableCoin: 0.75,
+      wallet: "GDEPOSIT",
+      description: "airtime payment settled",
+      created: "2026-10-02T17:00:00Z",
+      updated: "2026-10-02T18:00:00Z",
+    });
+    const live = await mainnet(request(app).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+    expect(live.status).toBe(200);
+
+    (getBillStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 502));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("settled"));
+    const stale = await mainnet(request(app).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+
+    // Every stale field is one the live answer uses, apart from the stale
+    // markers themselves. The live fields we do not hold — the deposit
+    // wallet, the description, the creation time — are left out, not
+    // invented.
+    for (const key of Object.keys(stale.body)) {
+      if (key === "stale" || key === "reason") continue;
+      expect(Object.keys(live.body)).toContain(key);
+    }
+    expect(stale.body.wallet).toBeUndefined();
+    expect(stale.body.description).toBeUndefined();
+    expect(stale.body.created).toBeUndefined();
+  });
+
+  it("answers a stale onramp order in the live field names, with providerStatus", async () => {
+    (getOnrampStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 502));
+    (findNgnOrder as jest.Mock).mockResolvedValue({
+      orderId: "47ca0421",
+      customerRef: "u",
+      walletAddress: G_ADDRESS,
+      status: "settled",
+      kind: "onramp",
+      coin: "xlm",
+      amountStableCoin: "6",
+      amountNGN: "8137",
+      rate: "290",
+      billCategory: null,
+      provider: null,
+      settledStableCoin: null,
+      settledNGN: null,
+      txHash: null,
+      updatedAt: new Date("2026-10-02T18:00:00Z"),
+    });
+
+    const res = await mainnet(request(makeApp()).get("/ngn/onramp/orders/47ca0421?customerRef=u"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.stale).toBe(true);
+    // The live onramp route does not translate, so neither does the stale
+    // one; the provider's word is also kept as providerStatus, as on bills.
+    expect(res.body.status).toBe("settled");
+    expect(res.body.providerStatus).toBe("settled");
+    // Linq names the stablecoin amount `amount` in a status answer.
+    expect(res.body.amount).toBe(6);
+    expect(res.body.amountNgn).toBe(8137);
+    // The exact key set: the live fields we hold, plus providerStatus and
+    // the stale markers. The bank details exist only in the provider's
+    // answer, so they are left out rather than invented.
+    expect(Object.keys(res.body).sort()).toEqual(
+      ["orderId", "customerRef", "status", "providerStatus", "amount", "amountNgn", "stale", "reason"].sort(),
+    );
+    expect(JSON.stringify(res.body)).not.toContain(G_ADDRESS);
+  });
+
+  it("does not fall back on a 4xx from Linq on the onramp either", async () => {
+    (getOnrampStatus as jest.Mock).mockRejectedValue(new LinqError("Order not found", 404));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("settled"));
+
+    const res = await mainnet(request(makeApp()).get("/ngn/onramp/orders/47ca0421?customerRef=u"));
+
+    expect(res.status).toBe(404);
+    expect(res.body.stale).toBeUndefined();
+  });
+
   // A 4xx is Linq telling us something true about the request. Papering over it
   // with a stale row would turn "this order is not yours" into a status page.
   it("does not fall back on a 4xx from Linq", async () => {

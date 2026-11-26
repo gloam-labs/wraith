@@ -34,6 +34,12 @@ jest.mock("../db", () => ({
 }));
 
 import { reconcileNgnOrder } from "../linq/ngnOrders";
+import {
+  crossCheckAmountNgn,
+  isPlausibleNgn,
+  NGN_SCALE_FACTOR,
+  MAX_PLAUSIBLE_NGN,
+} from "../linq/webhook";
 
 /** A stored order. `amountNGN` is a String column, exactly as Prisma returns it. */
 function seed(amountNGN: string): Row {
@@ -134,5 +140,69 @@ describe("reconcileNgnOrder naira cross-check", () => {
 
     expect(row.settledNGN).toBeNull();
     expect(errors).toEqual([]);
+  });
+});
+
+describe("crossCheckAmountNgn (live provider scale cross-check)", () => {
+  const ORDER_AMOUNT_NGN = 20000;
+  const FIFTY_NGN = 50;
+
+  it("pins the provider scale factor to 100", () => {
+    expect(NGN_SCALE_FACTOR).toBe(100);
+  });
+
+  it("accepts matching amounts between webhook and order", () => {
+    const result = crossCheckAmountNgn(ORDER_AMOUNT_NGN, ORDER_AMOUNT_NGN);
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts a ₦50 airtime top-up order when webhook matches", () => {
+    const result = crossCheckAmountNgn(FIFTY_NGN, FIFTY_NGN);
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects when webhook is 100x too small (the 2026-10-14 provider scale bug)", () => {
+    const buggyAmount = ORDER_AMOUNT_NGN / 100;
+    const result = crossCheckAmountNgn(buggyAmount, ORDER_AMOUNT_NGN);
+    expect(result).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/100× off the order|100x off the order/),
+    });
+  });
+
+  it("rejects when webhook is 100x too large", () => {
+    const buggyAmount = ORDER_AMOUNT_NGN * 100;
+    const result = crossCheckAmountNgn(buggyAmount, ORDER_AMOUNT_NGN);
+    expect(result).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/100× off the order|100x off the order/),
+    });
+  });
+
+  it("rejects non-numeric or non-finite inputs", () => {
+    expect(crossCheckAmountNgn(NaN, ORDER_AMOUNT_NGN).ok).toBe(false);
+    expect(crossCheckAmountNgn(ORDER_AMOUNT_NGN, "invalid").ok).toBe(false);
+    expect(crossCheckAmountNgn(ORDER_AMOUNT_NGN, -100).ok).toBe(false);
+  });
+});
+
+describe("isPlausibleNgn (live provider amount bounds)", () => {
+  it("accepts plausible naira amounts including small airtime", () => {
+    expect(isPlausibleNgn(50)).toBe(true);
+    expect(isPlausibleNgn(20000)).toBe(true);
+    expect(isPlausibleNgn(MAX_PLAUSIBLE_NGN)).toBe(true);
+  });
+
+  it("flags amounts exceeding the maximum plausible onramp limit", () => {
+    expect(isPlausibleNgn(2_000_000_000)).toBe(false);
+    expect(isPlausibleNgn(MAX_PLAUSIBLE_NGN + 1)).toBe(false);
+  });
+
+  it("rejects zero, negative, or non-finite values", () => {
+    expect(isPlausibleNgn(0)).toBe(false);
+    expect(isPlausibleNgn(-1)).toBe(false);
+    expect(isPlausibleNgn(NaN)).toBe(false);
+    expect(isPlausibleNgn(Infinity)).toBe(false);
+    expect(isPlausibleNgn(undefined)).toBe(false);
   });
 });
