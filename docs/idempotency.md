@@ -103,14 +103,16 @@ likewise an upsert on `(network, orderId)`.
 
 **Order-safe for finished orders.** Both `reconcileOfframpOrder` and
 `reconcileNgnOrder` refuse to replace a terminal status (decided by
-`terminalStatusOf` in `src/metrics.ts`) with a non-terminal one. A late
+`terminalStatusOf` in `src/metrics.ts`) with a plain non-terminal one. A late
 redelivery of `order.processing` arriving after `order.completed` or
 `order.failed` is logged once and ignored — leaving status and settled amounts
 untouched, preventing the periodic sweep from re-polling a finished order, and
 ensuring `orders_terminal_total` counts each order's ending exactly once in any
 delivery order. A different terminal status (such as `refunded` after
-`completed`) may still replace an earlier terminal status, because a refund
-after completion is a real state change.
+`completed`) or a status carrying a failure word (such as `refund_pending` or
+`rejected`, matched by `isFailureStatus`) still passes through so
+post-completion refunds and rejections update the row, stay visible to the
+reconciliation sweep, and record a money failure.
 
 ### `POST /ngn/onramp/orders` and `POST /ngn/bills`: **not idempotent**
 

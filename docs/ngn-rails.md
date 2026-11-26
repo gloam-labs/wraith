@@ -522,8 +522,9 @@ Reconciliation is idempotent per event and order-safe for finished orders — it
 writes settled figures to a row keyed on the order id, ignores late non-terminal
 events (such as `order.processing` arriving after `order.completed` or
 `order.failed`) with a single log line so status, settled amounts and
-`orders_terminal_total` stay intact, and still allows a subsequent terminal
-status such as `refunded` to replace an earlier terminal status
+`orders_terminal_total` stay intact, and still lets through subsequent terminal
+statuses (`refunded`) and failure-bearing statuses (`refund_pending`, `rejected`)
+so post-completion refunds and rejections update the row and record a money failure
 ([idempotency.md](./idempotency.md)). The 200 is sent *before* reconciling, because Linq times out at
 10 seconds and marks the delivery failed, and a database write on a throttled
 instance can outlast that.

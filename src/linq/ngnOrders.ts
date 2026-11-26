@@ -196,13 +196,16 @@ export async function reconcileNgnOrder(event: {
   const status = event.status ?? event.event;
   const wasTerminal = terminalStatusOf(existing.status);
   const isTerminal = terminalStatusOf(status);
+  const isFailure = isFailureStatus(status);
 
   // Never let a late non-terminal event (such as an out-of-order
   // `order.processing` webhook or a stale poll from the sweep) move a finished
   // order back to in-flight or overwrite its settled figures. Terminal-to-
-  // terminal transitions (e.g. completed -> refunded) remain allowed because a
-  // refund after completion is a real state change.
-  if (wasTerminal && !isTerminal) {
+  // terminal transitions (e.g. completed -> refunded) and statuses carrying a
+  // failure word (e.g. `refund_pending` or `rejected`) remain allowed so
+  // post-completion refunds and rejections still update the row, stay visible
+  // to the reconciliation sweep, and record a money failure.
+  if (wasTerminal && !isTerminal && !isFailure) {
     console.warn(
       `[linq] ignoring late non-terminal status "${status}" for ${existing.kind} order ${event.orderId} (already "${existing.status}")`,
     );
@@ -254,7 +257,7 @@ export async function reconcileNgnOrder(event: {
   // this record the only thing that ever learns about the failure is a
   // client that happens to poll. A poll recording the same order hits the
   // same (network, kind, orderId) row, so webhook plus poll is one incident.
-  if (isFailureStatus(status)) {
+  if (isFailure) {
     await recordMoneyFailure({
       network: existing.network,
       rail: existing.kind === "bill" ? "bill" : "onramp",

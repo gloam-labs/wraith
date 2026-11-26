@@ -383,6 +383,107 @@ describe("reconcileOfframpOrder — terminal order safety", () => {
     expect(await terminalCount("offramp")).toBe(1);
     expect(await terminalCount("offramp", "completed")).toBe(1);
   });
+
+  it("lets completed -> refund_pending through the guard, records a money failure, and keeps the row visible to the sweep", async () => {
+    const row = seedOfframp({ orderId: "offramp-comp-then-refund-pending" });
+
+    await reconcileOfframpOrder({
+      orderId: row.orderId,
+      network: "mainnet",
+      event: "order.completed",
+      status: "completed",
+      amountStableCoin: 50,
+      amountNGN: 75000,
+      txHash: "e".repeat(64),
+    });
+    warnSpy.mockClear();
+    (prisma.moneyFailure.upsert as jest.Mock).mockClear();
+
+    expect(
+      await reconcileOfframpOrder({
+        orderId: row.orderId,
+        network: "mainnet",
+        event: "order.refund_pending",
+        status: "refund_pending",
+      }),
+    ).toBe(true);
+
+    expect(row).toMatchObject({
+      status: "refund_pending",
+      settledStableCoin: "50",
+      settledNGN: "75000",
+      depositTxHash: "e".repeat(64),
+    });
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(prisma.moneyFailure.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.moneyFailure.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          network_kind_orderId: {
+            network: "mainnet",
+            kind: "payout_rejected",
+            orderId: row.orderId,
+          },
+        },
+        create: expect.objectContaining({
+          rail: "offramp",
+          kind: "payout_rejected",
+          providerCode: "refund_pending",
+        }),
+      }),
+    );
+    expect(await terminalCount("offramp", "completed")).toBe(1);
+    expect(await terminalCount("offramp")).toBe(1);
+
+    // Because status moved to refund_pending, the periodic sweep now picks it up
+    // and can drive it to the final refunded status even if the webhook is lost.
+    mockOfframp.mockResolvedValueOnce({
+      status: "refunded",
+      amountStableCoin: 50,
+      amountNGN: 75000,
+    });
+    const sweep = await runOrderReconciliationJob({ now: NOW, ageMs: 1000 });
+    expect(sweep.checked).toBe(1);
+    expect(sweep.resolved).toBe(1);
+    expect(row.status).toBe("refunded");
+  });
+
+  it("lets completed -> rejected through the guard and records a money failure", async () => {
+    const row = seedOfframp({ orderId: "offramp-comp-then-rejected" });
+
+    await reconcileOfframpOrder({
+      orderId: row.orderId,
+      network: "mainnet",
+      event: "order.completed",
+      status: "completed",
+      amountStableCoin: 50,
+      amountNGN: 75000,
+    });
+    warnSpy.mockClear();
+    (prisma.moneyFailure.upsert as jest.Mock).mockClear();
+
+    expect(
+      await reconcileOfframpOrder({
+        orderId: row.orderId,
+        network: "mainnet",
+        event: "order.rejected",
+        status: "rejected",
+      }),
+    ).toBe(true);
+
+    expect(row.status).toBe("rejected");
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(prisma.moneyFailure.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.moneyFailure.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          rail: "offramp",
+          kind: "payout_rejected",
+          providerCode: "rejected",
+        }),
+      }),
+    );
+  });
 });
 
 describe("reconcileNgnOrder — terminal order safety", () => {
@@ -557,6 +658,105 @@ describe("reconcileNgnOrder — terminal order safety", () => {
     expect(row.status).toBe("refunded");
     expect(await terminalCount("bills")).toBe(1);
     expect(await terminalCount("bills", "completed")).toBe(1);
+  });
+
+  it("lets completed -> refund_pending through the guard, records a money failure, and keeps the row visible to the sweep", async () => {
+    const row = seedNgn({ kind: "bill", orderId: "bill-comp-then-refund-pending" });
+
+    await reconcileNgnOrder({
+      orderId: row.orderId,
+      network: "mainnet",
+      event: "order.completed",
+      status: "completed",
+      amountStableCoin: 10,
+      amountNGN: 15000,
+      txHash: "f".repeat(64),
+    });
+    warnSpy.mockClear();
+    (prisma.moneyFailure.upsert as jest.Mock).mockClear();
+
+    expect(
+      await reconcileNgnOrder({
+        orderId: row.orderId,
+        network: "mainnet",
+        event: "order.refund_pending",
+        status: "refund_pending",
+      }),
+    ).toBe(true);
+
+    expect(row).toMatchObject({
+      status: "refund_pending",
+      settledStableCoin: "10",
+      settledNGN: "15000",
+      txHash: "f".repeat(64),
+    });
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(prisma.moneyFailure.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.moneyFailure.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          network_kind_orderId: {
+            network: "mainnet",
+            kind: "order_failed",
+            orderId: row.orderId,
+          },
+        },
+        create: expect.objectContaining({
+          rail: "bill",
+          kind: "order_failed",
+          providerCode: "refund_pending",
+        }),
+      }),
+    );
+    expect(await terminalCount("bills", "completed")).toBe(1);
+    expect(await terminalCount("bills")).toBe(1);
+
+    mockBill.mockResolvedValueOnce({
+      status: "refunded",
+      amountStableCoin: 10,
+      amountNgn: 15000,
+    });
+    const sweep = await runOrderReconciliationJob({ now: NOW, ageMs: 1000 });
+    expect(sweep.checked).toBe(1);
+    expect(sweep.resolved).toBe(1);
+    expect(row.status).toBe("refunded");
+  });
+
+  it("lets completed -> rejected through the guard and records a money failure", async () => {
+    const row = seedNgn({ kind: "onramp", orderId: "onramp-comp-then-rejected" });
+
+    await reconcileNgnOrder({
+      orderId: row.orderId,
+      network: "mainnet",
+      event: "order.completed",
+      status: "completed",
+      amountStableCoin: 10,
+      amountNGN: 15000,
+    });
+    warnSpy.mockClear();
+    (prisma.moneyFailure.upsert as jest.Mock).mockClear();
+
+    expect(
+      await reconcileNgnOrder({
+        orderId: row.orderId,
+        network: "mainnet",
+        event: "order.rejected",
+        status: "rejected",
+      }),
+    ).toBe(true);
+
+    expect(row.status).toBe("rejected");
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(prisma.moneyFailure.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.moneyFailure.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          rail: "onramp",
+          kind: "order_failed",
+          providerCode: "rejected",
+        }),
+      }),
+    );
   });
 });
 

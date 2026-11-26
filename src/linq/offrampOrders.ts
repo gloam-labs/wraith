@@ -47,13 +47,16 @@ export async function reconcileOfframpOrder(
   // wallet polling a finished order, from counting the same ending twice.
   const wasTerminal = terminalStatusOf(existing.status);
   const isTerminal = terminalStatusOf(status);
+  const isFailure = isFailureStatus(status);
 
   // Never let a late non-terminal event (such as an out-of-order
   // `order.processing` webhook or a stale poll from the sweep) move a finished
   // order back to in-flight or overwrite its settled figures. Terminal-to-
-  // terminal transitions (e.g. completed -> refunded) remain allowed because a
-  // refund after completion is a real state change.
-  if (wasTerminal && !isTerminal) {
+  // terminal transitions (e.g. completed -> refunded) and statuses carrying a
+  // failure word (e.g. `refund_pending` or `rejected`) remain allowed so
+  // post-completion refunds and rejections still update the row, stay visible
+  // to the reconciliation sweep, and record a money failure.
+  if (wasTerminal && !isTerminal && !isFailure) {
     console.warn(
       `[linq] ignoring late non-terminal status "${status}" for offramp order ${event.orderId} (already "${existing.status}")`,
     );
@@ -77,7 +80,7 @@ export async function reconcileOfframpOrder(
   // path — webhook, status poll and the periodic sweep — goes through this
   // function, and the (network, kind, orderId) key turns several sightings of
   // one failed order into one incident rather than several alarms.
-  if (isFailureStatus(status)) {
+  if (isFailure) {
     await recordMoneyFailure({
       network: existing.network,
       rail: "offramp",
