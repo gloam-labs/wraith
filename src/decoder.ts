@@ -2,6 +2,7 @@ import * as StellarSdk from "@stellar/stellar-sdk";
 import type { RawEvent } from "./rpc";
 import type { TransferRecord } from "./db";
 import { eventsSkippedTotal } from "./metrics";
+import type { Network } from "./network";
 
 // ─── Recognised event types ───────────────────────────────────────────────────
 // SEP-41 / CAP-67 standard topic[0] symbols
@@ -145,8 +146,11 @@ export function parseEvent(
  *
  * `parseEvent` throws on malformed token events; one such event must not fail
  * the whole batch, or the indexer retries the same ledger range forever.
+ *
+ * `network` is required so `events_skipped_total` can be pinned to a chain in
+ * a process that runs a testnet loop and a mainnet loop simultaneously.
  */
-export function parseEvents(rawEvents: RawEvent[]): TransferRecord[] {
+export function parseEvents(rawEvents: RawEvent[], network: Network): TransferRecord[] {
   const records: TransferRecord[] = [];
   let skipped = 0;
   let failed = 0;
@@ -168,11 +172,11 @@ export function parseEvents(rawEvents: RawEvent[]): TransferRecord[] {
   }
 
   if (skipped > 0) {
-    eventsSkippedTotal.inc({ reason: "unrecognised" }, skipped);
+    eventsSkippedTotal.inc({ network, reason: "unrecognised" }, skipped);
     console.debug(`[parser] Skipped ${skipped} non-token events out of ${rawEvents.length}`);
   }
   if (failed > 0) {
-    eventsSkippedTotal.inc({ reason: "malformed" }, failed);
+    eventsSkippedTotal.inc({ network, reason: "malformed" }, failed);
     console.warn(`[parser] Skipped ${failed} malformed events out of ${rawEvents.length}`);
   }
 

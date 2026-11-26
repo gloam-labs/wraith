@@ -24,6 +24,7 @@ import { Router, Request, Response, NextFunction } from "express";
 
 import { prisma } from "../db";
 import { isMoneyFailureKind, isMoneyFailureRail } from "../linq/moneyFailures";
+import { hasNetworkSelector, requestNetwork } from "../middleware/network";
 
 function isConfigured(): boolean {
   return Boolean(process.env.OPS_TOKEN?.trim());
@@ -54,6 +55,20 @@ function bearerToken(req: Request): string | null {
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
+/**
+ * Parse a positive integer (1..MAX_SAFE_INTEGER).
+ * Returns null if the value is not a valid positive integer string or number.
+ */
+function parsePositiveInteger(value: unknown): number | null {
+  if (value === undefined) return null;
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== "string" && typeof raw !== "number") return null;
+  const s = String(raw).trim();
+  if (!/^[1-9]\d*$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
 export function createOpsRouter(): Router {
   const router = Router();
 
@@ -77,10 +92,13 @@ export function createOpsRouter(): Router {
    * Recent money-affecting failures, newest first.
    *
    * Query params, all optional:
-   *   rail   — one of the bounded rails (offramp, onramp, bill, unknown)
-   *   kind   — one of the bounded kinds (payout_rejected, order_failed,
-   *            reconcile_failed)
-   *   limit  — page size, 1..200, default 50
+   *   rail    — one of the bounded rails (offramp, onramp, bill, unknown)
+   *   kind    — one of the bounded kinds (payout_rejected, order_failed,
+   *             reconcile_failed)
+   *   limit   — page size, positive integer, capped at 200, default 50
+   *   before  — positive integer id, returning rows older than it
+   *   since   — ISO 8601 date, returning rows recorded at or after it
+   *   network — filter to a specific network (resolved by networkMiddleware)
    */
   router.get("/failures", async (req: Request, res: Response) => {
     const rail = req.query["rail"];
@@ -95,11 +113,44 @@ export function createOpsRouter(): Router {
         .json({ error: "kind must be one of: payout_rejected, order_failed, reconcile_failed" });
       return;
     }
-    const parsedLimit = parseInt(String(req.query["limit"] ?? ""), 10);
-    const limit =
-      Number.isFinite(parsedLimit) && parsedLimit > 0
-        ? Math.min(parsedLimit, MAX_LIMIT)
-        : DEFAULT_LIMIT;
+
+    let limit = DEFAULT_LIMIT;
+    if (req.query["limit"] !== undefined) {
+      const parsedLimit = parsePositiveInteger(req.query["limit"]);
+      if (parsedLimit === null) {
+        res.status(400).json({ error: "limit must be a positive integer" });
+        return;
+      }
+      limit = Math.min(parsedLimit, MAX_LIMIT);
+    }
+
+    let before: number | undefined;
+    if (req.query["before"] !== undefined) {
+      const parsedBefore = parsePositiveInteger(req.query["before"]);
+      if (parsedBefore === null) {
+        res.status(400).json({ error: "before must be a positive integer" });
+        return;
+      }
+      before = parsedBefore;
+    }
+
+    let since: Date | undefined;
+    if (req.query["since"] !== undefined) {
+      const rawSince = Array.isArray(req.query["since"]) ? req.query["since"][0] : req.query["since"];
+      if (typeof rawSince !== "string" || !rawSince.trim()) {
+        res.status(400).json({ error: "since must be a valid ISO date" });
+        return;
+      }
+      const parsedDate = new Date(rawSince.trim());
+      if (isNaN(parsedDate.getTime())) {
+        res.status(400).json({ error: "since must be a valid ISO date" });
+        return;
+      }
+      since = parsedDate;
+    }
+
+    // Only filter by network when the caller sent a selector; otherwise return all networks.
+    const network = hasNetworkSelector(req) ? requestNetwork(req) : undefined;
 
     // no-store: an operator refreshing during an incident must see the row
     // the failure just wrote, not a cached page from before it.
@@ -109,17 +160,29 @@ export function createOpsRouter(): Router {
       // Newest first by primary key: every insert is an autoincrement, so this
       // orders by time of recording without a clock-skew footnote, and the
       // (network, createdAt) index serves the filter.
+      // take: limit + 1 so we can tell if there is a next page without a separate count.
       const rows = await prisma.moneyFailure.findMany({
         where: {
+          ...(network ? { network } : {}),
           ...(rail ? { rail } : {}),
           ...(kind ? { kind } : {}),
+          ...(before !== undefined ? { id: { lt: before } } : {}),
+          ...(since !== undefined ? { createdAt: { gte: since } } : {}),
         },
         orderBy: { id: "desc" },
-        take: limit,
+        take: limit + 1,
       });
 
+      const hasMore = rows.length > limit;
+      const returnRows = hasMore ? rows.slice(0, limit) : rows;
+      const nextBefore =
+        hasMore && returnRows.length > 0
+          ? returnRows[returnRows.length - 1].id
+          : null;
+
       res.json({
-        failures: rows.map((row) => ({
+        failures: returnRows.map((row) => ({
+          id: row.id,
           network: row.network,
           rail: row.rail,
           kind: row.kind,
@@ -132,6 +195,7 @@ export function createOpsRouter(): Router {
           lastSeenAt: row.updatedAt.toISOString(),
         })),
         limit,
+        nextBefore,
       });
     } catch (err) {
       console.error(

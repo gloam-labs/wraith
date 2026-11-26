@@ -901,10 +901,39 @@ export const opsFailuresQuerySchema = z.object({
     max: 200,
     description: "Page size. Defaults to 50 and is capped at 200; this is a page, not an export.",
   }),
+  before: optionalQueryInt({
+    min: 1,
+    description:
+      "Only failures older than this id (exclusive). Pass nextBefore from a previous page to walk backwards.",
+  }).openapi({ example: 42 }),
+  network: z.preprocess(
+    (value) => {
+      const raw = firstValue(value);
+      if (raw === undefined || raw === null || raw === "") return undefined;
+      if (typeof raw !== "string") return raw;
+      return raw.trim().toLowerCase();
+    },
+    z
+      .enum(["testnet", "mainnet"])
+      .optional()
+      .openapi({
+        description:
+          "Network to read from. When omitted, failures from all networks are returned. " +
+          "May also be sent as the X-Network header; the query parameter wins.",
+        example: "testnet",
+      })
+  ),
+  since: optionalQueryDateTime(
+    "Only failures recorded at or after this timestamp (ISO 8601).",
+  ).openapi({ example: "2026-01-01T00:00:00.000Z" }),
 });
 
 /** One money-affecting failure, as an operator reads it. */
 const moneyFailureSchema = z.object({
+  id: z.number().int().openapi({
+    description: "Failure record id.",
+    example: 42,
+  }),
   network: z.string().openapi({ example: "testnet" }),
   rail: z.string().openapi({
     description: "Which rail failed: offramp, onramp, bill, or unknown.",
@@ -942,6 +971,10 @@ const moneyFailureSchema = z.object({
 export const opsFailuresResponseSchema = z.object({
   failures: z.array(moneyFailureSchema).openapi({ description: "Recent failures, newest first." }),
   limit: z.number().int().openapi({ description: "The page size actually applied, after capping." }),
+  nextBefore: z.number().int().nullable().openapi({
+    description: "The id to pass as before on the next call, or null on the last page.",
+    example: 42,
+  }),
 });
 
 export const ngnCustomerStatusQuerySchema = z.object({
@@ -987,3 +1020,57 @@ export const ngnDataBundleSchema = z.object({
 export const ngnDataBundlesResponseSchema = z.object({
   bundles: z.array(ngnDataBundleSchema),
 });
+
+// ─── /discord/* — the Veil Discord roles bot (internal) ─────────────────────
+
+export const discordLinkCodeParamsSchema = z.object({
+  code: z.string().openapi({
+    description: "The eight-character code the bot gave the member. Case and a dash are ignored.",
+    example: "ABCD-2345",
+  }),
+});
+
+export const discordLinkCodeResponseSchema = z.object({
+  discordUserId: z.string().openapi({ description: "Discord's id for the member. Part of the text the wallet signs." }),
+  discordUsername: z.string().openapi({ description: "Shown to the member before they approve." }),
+  expiresAt: z.string().openapi({ description: "ISO time after which the code stops working." }),
+});
+
+export const discordLinkRequestSchema = z.object({
+  code: z.string(),
+  wallet: z.string().nullable().optional().openapi({ description: "The smart wallet (C address), when one is being linked." }),
+  spending: z.string().nullable().optional().openapi({ description: "The spending account (G address), when one is being linked." }),
+  passkey: z
+    .object({
+      publicKey: z.string().openapi({ description: "Base64url, 65 bytes: the passkey's uncompressed P-256 public key." }),
+      authData: z.string().openapi({ description: "Base64url WebAuthn authenticator data." }),
+      clientDataJSON: z.string().openapi({ description: "Base64url WebAuthn client data." }),
+      signature: z.string().openapi({ description: "Base64url, 64 bytes: the raw r and s of the signature." }),
+    })
+    .optional()
+    .openapi({ description: "Required with `wallet`: the passkey's signature over the link statement." }),
+  spendingSignature: z.string().optional().openapi({
+    description: "Required with `spending`: base64url Ed25519 signature over the link statement hash.",
+  }),
+  names: z.array(z.string()).optional().openapi({
+    description: "Veil names the app believes the member holds. Each is checked against the registry.",
+  }),
+});
+
+export const discordLinkResponseSchema = z.object({
+  linked: z.literal(true),
+  discordUsername: z.string(),
+  roles: z.array(z.string()).openapi({ description: "The role names the member now has." }),
+  incomplete: z.boolean().openapi({ description: "True when a check could not be finished and will be retried." }),
+  inServer: z.boolean().openapi({ description: "False when the member is not in the server, so no role could be set." }),
+});
+
+export const discordErrorResponseSchema = z.object({
+  error: z.string(),
+  code: z.string(),
+});
+
+export const discordInteractionResponseSchema = z
+  .object({ type: z.number().int() })
+  .passthrough()
+  .openapi({ description: "A Discord interaction response, in Discord's own format." });

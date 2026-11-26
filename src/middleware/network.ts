@@ -37,7 +37,7 @@ export const NETWORK_HEADER = "x-network";
  * Query wins over header so a link someone can paste and share beats a default
  * their HTTP client set for them.
  */
-function rawSelector(req: Request): string | undefined {
+export function rawSelector(req: Request): string | undefined {
   const fromQuery = req.query?.network;
   const value = Array.isArray(fromQuery) ? fromQuery[0] : fromQuery;
   if (typeof value === "string" && value.trim() !== "") return value;
@@ -47,6 +47,13 @@ function rawSelector(req: Request): string | undefined {
   if (typeof header === "string" && header.trim() !== "") return header;
 
   return undefined;
+}
+
+/**
+ * Whether the request carried an explicit network selector (`?network=` or `X-Network`).
+ */
+export function hasNetworkSelector(req: Request): boolean {
+  return rawSelector(req) !== undefined;
 }
 
 /**

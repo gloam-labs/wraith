@@ -628,3 +628,93 @@ model MoneyFailure {
   @@index([network, createdAt])
   @@schema("wraith")
 }
+
+// ─── Discord roles ────────────────────────────────────────────────────────────
+// The Veil Discord bot (src/discord). One row per Discord member who has
+// proved a wallet is theirs or connected GitHub.
+//
+// This table is the only place a Discord account and a wallet address are
+// written down together, and no route returns it. Addresses are public and so
+// are Discord names; the pairing is not, and it is what an attacker would want
+// to pick out who holds what.
+model DiscordMember {
+  // Discord's id for the member (a snowflake). Not their name, which changes.
+  discordUserId String @id
+  network       String @default("mainnet")
+
+  // The smart wallet (C…) and spending account (G…) the member proved with a
+  // signature. Unique: a wallet proved by a second Discord account moves to
+  // it, so one wallet can never hand its roles to two people.
+  wallet   String?   @unique
+  spending String?   @unique
+  linkedAt DateTime?
+
+  // Names the app said the member holds. Each is re-checked against the
+  // registry before it counts; this is a list of things to ask about.
+  names String[] @default([])
+
+  // GitHub's numeric id (logins can be renamed and re-registered) and the
+  // login it had when connected, which is what the merged-PR search needs.
+  githubId    String? @unique
+  githubLogin String?
+
+  // The wallet's nonce at earlier checks, as [{ "at": ISO time, "nonce": n }],
+  // so activity over thirty days is a difference between two readings.
+  nonceHistory Json?
+  // When the spending account first acted. Looked up once; it cannot change.
+  firstSeenAt  DateTime?
+
+  // The last check *attempt*, successful or not, so a member whose check
+  // throws goes to the back of the queue instead of the front. `checkedAt`
+  // stays "when the facts were last read successfully"; the recheck job
+  // orders by this one.
+  lastAttemptAt DateTime?
+  // Checks in a row that threw, and in a row that found the member gone. Each
+  // buys a longer wait before the next attempt (see `recheckDelayMs`), so a
+  // member who keeps failing or has left cannot occupy every run.
+  failedAttempts Int @default(0)
+  absentChecks   Int @default(0)
+
+  checkedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // The recheck job walks members oldest-attempted first.
+  @@index([lastAttemptAt])
+  @@index([checkedAt])
+  @@schema("wraith")
+}
+
+// A short code that ties one signing request to the Discord member who asked
+// for it. Ten minutes, one use.
+model DiscordLinkCode {
+  code            String    @id
+  discordUserId   String
+  // Shown in the app before the member approves, so they can see whose
+  // Discord account the wallet is about to be linked to.
+  discordUsername String
+  expiresAt       DateTime
+  usedAt          DateTime?
+  // Failed proofs against this code. A code that keeps failing is retired.
+  attempts        Int       @default(0)
+  // Discord's token for the private message that showed this code, so that
+  // message can be changed to "linked" when the proof arrives. Discord stops
+  // honouring it after fifteen minutes, and it is cleared once used.
+  interactionToken String?
+  createdAt       DateTime  @default(now())
+
+  @@index([discordUserId])
+  @@index([expiresAt])
+  @@schema("wraith")
+}
+
+// A GitHub device-flow request waiting for the member to approve it on
+// github.com. Holds GitHub's device code only until then; never a token.
+model DiscordGithubRequest {
+  discordUserId String   @id
+  deviceCode    String
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  @@schema("wraith")
+}

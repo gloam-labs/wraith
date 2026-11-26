@@ -157,6 +157,10 @@ const CORS_RULES: readonly CorsRule[] = [
   { surface: "linq-callback", path: "/webhooks/linq", methods: "*", policy: "server" },
   // Subscription management: makes us POST to a caller's URL, deletes one.
   { surface: "webhook-admin", path: "/webhooks", methods: "*", policy: "allowlist" },
+  // Discord's own servers calling us with a signed interaction. Not a browser.
+  { surface: "discord-callback", path: "/discord/interactions", methods: "*", policy: "server" },
+  // Linking a wallet to a Discord member: a write, from the Veil apps only.
+  { surface: "discord-link", path: "/discord", methods: "*", policy: "allowlist" },
   // The naira rails: customer provisioning, KYC, buying naira, paying bills.
   { surface: "ngn-rails", path: "/ngn", methods: "*", policy: "allowlist" },
   // The offramp: real payouts, provider quota, provider configuration.

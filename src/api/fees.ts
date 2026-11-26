@@ -49,13 +49,94 @@ export interface PlatformFee {
 /** Stellar carries seven decimal places; anything beyond them cannot be sent. */
 const STROOP_DP = 7;
 
-function validRate(value: string | undefined): number | null {
+/**
+ * A decimal parsed exactly: `value = digits / 10^scale`, with `digits` a
+ * BigInt. All fee arithmetic is done on these, never on JavaScript numbers —
+ * a float cannot represent most decimal fractions, and the difference lands
+ * on somebody's charge. (`4.35` at 1% in floats is `0.0434999`, not `0.0435`.)
+ */
+export interface DecimalParts {
+  digits: bigint;
+  scale: number;
+}
+
+/**
+ * Parse a decimal string exactly, or return null when it is not one. Exponent
+ * notation is accepted because `String(number)` produces it for very small
+ * and very large numbers (`String(0.0000001)` is `"1e-7"`).
+ */
+export function parseDecimal(value: string): DecimalParts | null {
+  const match = /^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$/.exec(value.trim());
+  if (!match) return null;
+  const [, sign, intPart = "", fracA, fracB, expPart] = match;
+  const frac = fracA ?? fracB ?? "";
+  let digits = BigInt(intPart + frac || "0");
+  if (sign === "-") digits = -digits;
+  return { digits, scale: frac.length - (expPart ? parseInt(expPart, 10) : 0) };
+}
+
+/**
+ * The decimal string naming a `number | string` input. A number is taken at
+ * the decimal its string form names — `String(4.35)` is `"4.35"` — and is
+ * never itself used in arithmetic.
+ */
+function decimalString(value: number | string): string {
+  return typeof value === "number" ? String(value) : value.trim();
+}
+
+/** Exact comparison of two parsed decimals: -1, 0 or 1. */
+export function compareDecimal(a: DecimalParts, b: DecimalParts): number {
+  const scale = Math.max(a.scale, b.scale);
+  const av = a.digits * 10n ** BigInt(scale - a.scale);
+  const bv = b.digits * 10n ** BigInt(scale - b.scale);
+  return av < bv ? -1 : av > bv ? 1 : 0;
+}
+
+/** The canonical decimal string for a parsed decimal: no trailing zeros. */
+export function formatDecimal(parts: DecimalParts): string {
+  let { digits, scale } = parts;
+  if (digits === 0n) return "0";
+  while (digits % 10n === 0n) {
+    digits /= 10n;
+    scale -= 1;
+  }
+  const negative = digits < 0n;
+  const str = (negative ? -digits : digits).toString();
+  let out: string;
+  if (scale <= 0) out = str + "0".repeat(-scale);
+  else if (str.length > scale) out = `${str.slice(0, -scale)}.${str.slice(-scale)}`;
+  else out = `0.${"0".repeat(scale - str.length)}${str}`;
+  return negative ? `-${out}` : out;
+}
+
+/**
+ * A parsed decimal floored to whole stroops. Fee-path values are
+ * non-negative, so BigInt's truncating division is a floor.
+ */
+function stroopsFloor({ digits, scale }: DecimalParts): bigint {
+  if (scale <= STROOP_DP) return digits * 10n ** BigInt(STROOP_DP - scale);
+  return digits / 10n ** BigInt(scale - STROOP_DP);
+}
+
+/** The canonical decimal string for a stroop count. */
+function formatStroops(stroops: bigint): string {
+  const negative = stroops < 0n;
+  const raw = (negative ? -stroops : stroops).toString().padStart(STROOP_DP + 1, "0");
+  const whole = raw.slice(0, -STROOP_DP);
+  const frac = raw.slice(-STROOP_DP).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${frac ? `.${frac}` : ""}`;
+}
+
+function validRate(value: string | undefined): string | null {
   const raw = value?.trim();
   if (!raw) return null;
-  const rate = Number(raw);
+  const parts = parseDecimal(raw);
+  if (!parts) return null;
   // A fee over 100% is always a misconfiguration, and charging it would take
   // more than the user is sending.
-  return Number.isFinite(rate) && rate > 0 && rate <= 100 ? rate : null;
+  if (compareDecimal(parts, { digits: 0n, scale: 0 }) <= 0) return null;
+  if (compareDecimal(parts, { digits: 100n, scale: 0 }) > 0) return null;
+  return formatDecimal(parts);
 }
 
 /**
@@ -67,15 +148,28 @@ function validRate(value: string | undefined): number | null {
  * zero where one was configured.
  */
 export function feeForAmount(
-  sent: number,
-  policy: { percent: number; min: number | null; max: number | null },
+  sent: number | string,
+  policy: { percent: number | string; min: number | string | null; max: number | string | null },
 ): string {
-  const raw = (sent * policy.percent) / 100;
-  const factor = 10 ** STROOP_DP;
-  let fee = Math.floor(raw * factor) / factor;
-  if (policy.max !== null) fee = Math.min(fee, policy.max);
-  if (policy.min !== null) fee = Math.max(fee, policy.min);
-  return fee.toFixed(STROOP_DP).replace(/0+$/, '').replace(/\.$/, '');
+  const sentParts = parseDecimal(decimalString(sent)) ?? { digits: 0n, scale: 0 };
+  const percentParts = parseDecimal(decimalString(policy.percent)) ?? { digits: 0n, scale: 0 };
+  // In stroops: floor(sent × percent / 100 × 10^STROOP_DP), computed exactly.
+  // The shift folds the two scales, the division by 100 and the stroop
+  // scaling into one power of ten; a negative shift divides, and BigInt
+  // division truncates — which, for these non-negative values, is the
+  // rounding down the policy promises.
+  const shift = BigInt(STROOP_DP - sentParts.scale - percentParts.scale - 2);
+  const product = sentParts.digits * percentParts.digits;
+  let fee = shift >= 0n ? product * 10n ** shift : product / 10n ** -shift;
+  if (policy.max !== null) {
+    const cap = parseDecimal(decimalString(policy.max));
+    if (cap) fee = fee > stroopsFloor(cap) ? stroopsFloor(cap) : fee;
+  }
+  if (policy.min !== null) {
+    const floor = parseDecimal(decimalString(policy.min));
+    if (floor) fee = fee < stroopsFloor(floor) ? stroopsFloor(floor) : fee;
+  }
+  return formatStroops(fee);
 }
 
 /**
@@ -87,22 +181,32 @@ export function feeForAmount(
  */
 export type FeeBasis = "percent" | "floor" | "cap" | "flat" | "no_amount";
 
-export function feeBasis(fee: PlatformFee, sent?: number): FeeBasis {
+export function feeBasis(fee: PlatformFee, sent?: number | string): FeeBasis {
   if (fee.percent === undefined) return "flat";
   if (sent === undefined) return "no_amount";
-  const charged = Number(fee.amount);
-  const uncapped = Number(
-    feeForAmount(sent, { percent: Number(fee.percent), min: null, max: null }),
-  );
-  if (fee.max !== undefined && charged === Number(fee.max) && uncapped > charged) return "cap";
-  if (fee.min !== undefined && charged === Number(fee.min) && uncapped < charged) return "floor";
+  // Exact comparisons: the label is what the ledger records to explain the
+  // charge, and a float `===` can call a capped fee a percent fee (or the
+  // reverse) on values a hair apart.
+  const charged = parseDecimal(fee.amount);
+  const uncapped = parseDecimal(feeForAmount(sent, { percent: fee.percent, min: null, max: null }));
+  if (!charged || !uncapped) return "percent";
+  if (fee.max !== undefined) {
+    const cap = parseDecimal(fee.max);
+    if (cap && compareDecimal(charged, cap) === 0 && compareDecimal(uncapped, charged) > 0) return "cap";
+  }
+  if (fee.min !== undefined) {
+    const floor = parseDecimal(fee.min);
+    if (floor && compareDecimal(charged, floor) === 0 && compareDecimal(uncapped, charged) < 0) return "floor";
+  }
   return "percent";
 }
 
 function validAmount(value: string | undefined): string | null {
   const amount = value?.trim();
   if (!amount) return null;
-  if (!/^\d+(\.\d{1,7})?$/.test(amount) || Number(amount) <= 0) return null;
+  if (!/^\d+(\.\d{1,7})?$/.test(amount)) return null;
+  const parts = parseDecimal(amount);
+  if (!parts || parts.digits <= 0n) return null;
   return amount;
 }
 
@@ -120,7 +224,7 @@ function validAmount(value: string | undefined): string | null {
  * the user did not ask for; if we cannot say exactly what it is and where it
  * goes, we do not charge it.
  */
-export function configuredFees(sentAmount?: number): Record<string, PlatformFee> {
+export function configuredFees(sentAmount?: number | string): Record<string, PlatformFee> {
   const destination = process.env.VEIL_FEE_DESTINATION?.trim();
   if (!destination || !isClassicAddress(destination)) return {};
 
@@ -141,22 +245,23 @@ export function configuredFees(sentAmount?: number): Record<string, PlatformFee>
       // No rate configured: the flat amount, exactly as before.
       return flat ? { amount: flat, assetCode: code, assetIssuer: issuer, destination } : null;
     }
-    const floor = min ? Number(min) : flat ? Number(flat) : null;
-    const cap = max ? Number(max) : null;
+    const floor = min ?? flat;
+    const cap = max;
+    const sentParts = sentAmount !== undefined ? parseDecimal(decimalString(sentAmount)) : null;
     // Without an amount to price, answer with the floor — see `amount` above.
     const amount =
-      sentAmount !== undefined && Number.isFinite(sentAmount) && sentAmount > 0
-        ? feeForAmount(sentAmount, { percent, min: floor, max: cap })
-        : (floor ?? 0).toFixed(STROOP_DP).replace(/0+$/, '').replace(/\.$/, '');
+      sentParts && sentParts.digits > 0n
+        ? feeForAmount(sentAmount!, { percent, min: floor, max: cap })
+        : formatStroops(floor !== null ? stroopsFloor(parseDecimal(floor)!) : 0n);
     if (!validAmount(amount)) return null;
     return {
       amount,
       assetCode: code,
       assetIssuer: issuer,
       destination,
-      percent: String(percent),
-      ...(floor !== null ? { min: String(floor) } : {}),
-      ...(cap !== null ? { max: String(cap) } : {}),
+      percent,
+      ...(floor !== null ? { min: formatStroops(stroopsFloor(parseDecimal(floor)!)) } : {}),
+      ...(cap !== null ? { max: formatStroops(stroopsFloor(parseDecimal(cap)!)) } : {}),
     };
   };
 
@@ -231,8 +336,11 @@ export function feesRouter(): Router {
     // `?amount=` is the amount being sent, so the fee can scale with it. A
     // client too old to send one gets the floor, which is why this is optional
     // rather than required: the shipped APKs predate it and must keep working.
-    const raw = Number(String(req.query["amount"] ?? ""));
-    const sent = Number.isFinite(raw) && raw > 0 ? raw : undefined;
+    // It is parsed as a decimal string — at most seven places, the same rule
+    // `validAmount` applies to configured amounts — never through `Number`,
+    // so the amount priced is the amount the client wrote.
+    const rawAmount = req.query["amount"];
+    const sent = typeof rawAmount === "string" ? (validAmount(rawAmount) ?? undefined) : undefined;
     const fees = configuredFees(sent);
     const assets = Object.keys(fees);
     // `enabled: false` rather than a 404, so a client can tell "no fee today"

@@ -164,6 +164,15 @@ describe("feeBasis", () => {
     // 0.5% of 4 = 0.02 — the floor did not change anything.
     expect(feeBasis(percentFee({ amount: "0.02" }), 4)).toBe("percent");
   });
+
+  it("compares exactly, on amounts floats cannot tell apart from the floor", () => {
+    // 1% of 4.35 is exactly 0.0435. In floating point the uncapped fee came
+    // out as 0.0434999 — a hair under the charged 0.0435 — and the old
+    // comparison recorded this as a floor charge it never was.
+    const fee = percentFee({ amount: "0.0435", percent: "1", min: "0.0435", max: "2" });
+    expect(feeBasis(fee, "4.35")).toBe("percent");
+    expect(feeBasis(fee, 4.35)).toBe("percent");
+  });
 });
 
 // ─── Policies ───────────────────────────────────────────────────────────────
@@ -360,6 +369,24 @@ describe("GET /fees records what it quoted", () => {
     }
     // VEIL_FEE_PERCENT applies to every asset; XLM's flat amount is its floor.
     expect(rows.map((r) => r.basis)).toEqual(["percent", "percent"]);
+  });
+
+  it("prices the amount the client wrote, exactly", async () => {
+    // At 1%, 4.35 and 8.7 are the amounts floating point got wrong through
+    // this very route: it answered 0.0434999 and 0.0869999.
+    process.env.VEIL_FEE_PERCENT = "1";
+    delete process.env.VEIL_FEE_MIN;
+    delete process.env.VEIL_FEE_MAX;
+
+    const a = await request(makeApp()).get("/fees?amount=4.35").set("x-network", "mainnet");
+    expect(a.body.fees["USDC"].amount).toBe("0.0435");
+    const b = await request(makeApp()).get("/fees?amount=8.7").set("x-network", "mainnet");
+    expect(b.body.fees["USDC"].amount).toBe("0.087");
+
+    await settle();
+    const usdc = quotesWritten().filter((r) => r.assetCode === "USDC");
+    expect(usdc.map((r) => r.quotedAgainst)).toEqual(["4.35", "8.7"]);
+    expect(usdc.map((r) => r.fee)).toEqual(["0.0435", "0.087"]);
   });
 
   it("records a quote with no amount as the floor it told the client", async () => {

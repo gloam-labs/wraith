@@ -30,6 +30,12 @@ jest.mock("../../linq/bills", () => {
   const actual = jest.requireActual("../../linq/bills");
   return { ...actual, payBill: jest.fn(), getBillStatus: jest.fn() };
 });
+// The sell side of the book. Only `getRate` is replaced: the route file takes
+// `LinqError` from the same module, and that has to stay the real class.
+jest.mock("../../linq/client", () => {
+  const actual = jest.requireActual("../../linq/client");
+  return { ...actual, getRate: jest.fn() };
+});
 jest.mock("../../linq/ngnOrders", () => ({
   recordNgnOrder: jest.fn().mockResolvedValue(undefined),
   findNgnOrder: jest.fn().mockResolvedValue(null),
@@ -45,7 +51,7 @@ import {
 } from "../../linq/onramp";
 import { getBillStatus, payBill } from "../../linq/bills";
 import { findNgnOrder, recordNgnOrder } from "../../linq/ngnOrders";
-import { LinqError } from "../../linq/client";
+import { LinqError, getRate as getSellRate } from "../../linq/client";
 import { usdPerCoin } from "../../linq/coinPrice";
 import { __clearNgnRateCache } from "../../api/ngn";
 
@@ -71,6 +77,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   // Shared across requests by design, so it must not leak across tests.
   __clearNgnRateCache();
+  // Set for every test, not per describe: USDC is quoted from the sell side,
+  // and a test that forgot this would otherwise price it off an undefined.
+  (getSellRate as jest.Mock).mockResolvedValue({ rate: 1350, currency: "NGN", coin: "USDC" });
 });
 
 describe("configuration gate", () => {
@@ -236,7 +245,27 @@ describe("the rate is per coin (the ₦1,000-for-0.6-XLM bug)", () => {
   it("still quotes USDC, because a quote is not an order", async () => {
     const res = await mainnet(request(makeApp()).get("/ngn/onramp/rate").query({ coin: "usdc" }));
     expect(res.status).toBe(200);
-    expect(res.body.rate).toBeCloseTo(1450, 6);
+    expect(res.body.coin).toBe("usdc");
+    expect(res.body.rate).toBeGreaterThan(0);
+  });
+
+  // 2026-11-11: a USDC airtime order priced at the buy rate was refused by the
+  // provider with "AmountStableCoin and rate do not match the current market
+  // rate". The only thing USDC buys on these routes is a bill, a bill is a
+  // sale, and the buy and sell sides were 100 naira apart. The phone works out
+  // how much USDC to send from this number, so this is where it has to be right.
+  it("quotes USDC from the sell side, because a bill is all USDC buys here", async () => {
+    const res = await mainnet(request(makeApp()).get("/ngn/onramp/rate").query({ coin: "usdc" }));
+    expect(res.body.rate).toBeCloseTo(1350, 6);
+    expect(getOnrampRate).not.toHaveBeenCalled();
+  });
+
+  // XLM bills priced from the buy side are accepted and vend. Nothing says the
+  // provider wants the other side there, so nothing moves.
+  it("leaves XLM on the buy side", async () => {
+    const res = await mainnet(request(makeApp()).get("/ngn/onramp/rate").query({ coin: "xlm" }));
+    expect(res.body.rate).toBeCloseTo(290, 6);
+    expect(getSellRate).not.toHaveBeenCalled();
   });
 
 
@@ -316,6 +345,144 @@ describe("the server refuses a mispriced order", () => {
     });
     const res = await mainnet(request(makeApp()).post("/ngn/onramp/orders").send(order(300)));
     expect(res.status).toBe(200);
+  });
+});
+
+// #462: a missing or malformed amount used to reach `rejectMispricedRate`
+// first, which spends a rate fetch from an allowance every user shares, and
+// then fell through to a `provider_rejected` code for a request the provider
+// was never asked. These are our refusals, so they carry `invalid_request` and
+// happen before either mock is touched.
+describe("amounts are checked before any rate fetch or provider call", () => {
+  beforeEach(() => {
+    (getOnrampRate as jest.Mock).mockResolvedValue(1450);
+    (usdPerCoin as jest.Mock).mockImplementation(async (c: string) =>
+      c === "usdc" ? 1 : 0.2,
+    );
+  });
+
+  const BAD_AMOUNTS: Array<[string, unknown]> = [
+    ["missing", undefined],
+    ["zero", 0],
+    ["a negative number", -1],
+    ["NaN", NaN],
+    ["Infinity", Infinity],
+    ["a non-numeric string", "abc"],
+    ["an empty string", ""],
+    ["a whitespace-only string", "   "],
+    ["a boolean", true],
+    ["an array", [5]],
+    ["an object", { value: 5 }],
+    ["an overflowing exponent string", "1e999"],
+  ];
+
+  // Plainly fake: no phone number, meter number or real account appears here.
+  const onrampOrder = (over: Record<string, unknown> = {}) => ({
+    customerRef: "ref_test_amount",
+    amountStableCoin: 1,
+    walletAddress: G_ADDRESS,
+    rate: 290,
+    coin: "xlm",
+    ...over,
+  });
+
+  const bill = (over: Record<string, unknown> = {}) => ({
+    customerRef: "ref_test_amount",
+    billCategory: "airtime",
+    provider: "MTN",
+    customerId: "0000000000",
+    amountNgn: 1000,
+    amountStableCoin: 0.75,
+    rate: 290,
+    coin: "xlm",
+    refundAddress: G_ADDRESS,
+    ...over,
+  });
+
+  function expectNoRateOrProviderCall(): void {
+    expect(getOnrampRate).not.toHaveBeenCalled();
+    expect(getSellRate).not.toHaveBeenCalled();
+    expect(usdPerCoin).not.toHaveBeenCalled();
+    expect(createOnrampOrder).not.toHaveBeenCalled();
+    expect(payBill).not.toHaveBeenCalled();
+  }
+
+  it.each(BAD_AMOUNTS)(
+    "refuses %s as amountStableCoin on an onramp order",
+    async (_label, value) => {
+      const res = await mainnet(
+        request(makeApp()).post("/ngn/onramp/orders").send(onrampOrder({ amountStableCoin: value })),
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("invalid_request");
+      expect(res.body.error).toMatch(/amountStableCoin/);
+      expectNoRateOrProviderCall();
+    },
+  );
+
+  it.each(BAD_AMOUNTS)("refuses %s as amountNgn on a bill", async (_label, value) => {
+    const res = await mainnet(
+      request(makeApp()).post("/ngn/bills").send(bill({ amountNgn: value })),
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("invalid_request");
+    expect(res.body.error).toMatch(/amountNgn/);
+    expectNoRateOrProviderCall();
+  });
+
+  it.each(BAD_AMOUNTS)(
+    "refuses %s as amountStableCoin on a bill",
+    async (_label, value) => {
+      const res = await mainnet(
+        request(makeApp()).post("/ngn/bills").send(bill({ amountStableCoin: value })),
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("invalid_request");
+      expect(res.body.error).toMatch(/amountStableCoin/);
+      expectNoRateOrProviderCall();
+    },
+  );
+
+  it("accepts a plain decimal string on an onramp order", async () => {
+    (createOnrampOrder as jest.Mock).mockResolvedValue({
+      orderId: "o1",
+      amountNgn: 290,
+      status: "pending",
+    });
+
+    const res = await mainnet(
+      request(makeApp())
+        .post("/ngn/onramp/orders")
+        .send(onrampOrder({ amountStableCoin: "1.5" })),
+    );
+
+    expect(res.status).toBe(200);
+    expect(createOnrampOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ amountStableCoin: 1.5 }),
+    );
+  });
+
+  it("accepts plain decimal strings on a bill", async () => {
+    (payBill as jest.Mock).mockResolvedValue({
+      id: "b1",
+      customerRef: "ref_test_amount",
+      wallet: "GDXYZ",
+      status: "initiated",
+    });
+
+    const res = await mainnet(
+      request(makeApp())
+        .post("/ngn/bills")
+        .send(bill({ amountNgn: "1000", amountStableCoin: "0.75" })),
+    );
+
+    expect(res.status).toBe(200);
+    expect(payBill).toHaveBeenCalledWith(
+      expect.objectContaining({ amountNgn: 1000, amountStableCoin: 0.75 }),
+    );
   });
 });
 
@@ -536,6 +703,50 @@ describe("bills", () => {
     expect(payBill).toHaveBeenCalledWith(expect.objectContaining({ coin: "xlm", refundAddress: G_ADDRESS }));
   });
 
+  const usdcBill = (rate: number) => ({
+    customerRef: "u",
+    billCategory: "airtime",
+    provider: "AIRTEL",
+    customerId: "08012345678",
+    amountNgn: 1000,
+    amountStableCoin: Number((1000 / rate).toFixed(7)),
+    rate,
+    coin: "usdc",
+    refundAddress: G_ADDRESS,
+  });
+
+  it("passes on a USDC bill priced at the rate the route quoted", async () => {
+    (payBill as jest.Mock).mockResolvedValue({
+      id: "9e4b1f2a",
+      customerRef: "u",
+      wallet: "GDXYZ",
+      status: "initiated",
+    });
+
+    const quoted = await mainnet(
+      request(makeApp()).get("/ngn/onramp/rate").query({ coin: "usdc" }),
+    );
+    const res = await mainnet(
+      request(makeApp()).post("/ngn/bills").send(usdcBill(quoted.body.rate)),
+    );
+
+    expect(res.status).toBe(200);
+    expect(payBill).toHaveBeenCalledWith(
+      expect.objectContaining({ coin: "usdc", rate: 1350, amountStableCoin: 0.7407407 }),
+    );
+  });
+
+  // The guard measures a USDC bill against the side it is quoted from. Against
+  // the buy side (1450) this rate is 13.8% out and would pass; against the sell
+  // side (1350) it is 22% out.
+  it("measures a USDC bill's rate against the sell side", async () => {
+    const res = await mainnet(request(makeApp()).post("/ngn/bills").send(usdcBill(1650)));
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("rate_out_of_date");
+    expect(payBill).not.toHaveBeenCalled();
+  });
+
   it("refuses an unknown bill category", async () => {
     const res = await mainnet(
       request(makeApp()).post("/ngn/bills").send({
@@ -679,6 +890,176 @@ describe("falling back to our own record", () => {
     expect(res.status).toBe(200);
     expect(res.body.stale).toBe(true);
     expect(res.body.status).toBe("initiated");
+  });
+
+  // The record as `findNgnOrder` returns it: our column names, amounts as
+  // strings, and fields no caller should receive. Plainly fake throughout.
+  const recordedBill = (status: string) => ({
+    orderId: "9e4b1f2a",
+    customerRef: "u",
+    walletAddress: G_ADDRESS,
+    status,
+    kind: "bill",
+    coin: "xlm",
+    amountStableCoin: "0.75",
+    amountNGN: "1000",
+    rate: "1333",
+    billCategory: "airtime",
+    provider: "MTN",
+    settledStableCoin: null,
+    settledNGN: null,
+    txHash: null,
+    updatedAt: new Date("2026-10-02T18:00:00Z"),
+  });
+
+  it("sends a settled bill with a status the bills screen ends on", async () => {
+    (getBillStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 502));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("settled"));
+
+    const res = await mainnet(request(makeApp()).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.stale).toBe(true);
+    // `settled` is not a word the bills screen ends on; the live route
+    // translates it, so the stale one must too — with the provider's own
+    // word kept alongside.
+    expect(res.body.status).toBe("settled (completed)");
+    expect(res.body.providerStatus).toBe("settled");
+    // The fallback is looked up under the request's own reference: a record
+    // belonging to another customerRef comes back null from findNgnOrder
+    // and is never returned.
+    expect(findNgnOrder).toHaveBeenCalledWith("mainnet", "u", "9e4b1f2a");
+  });
+
+  // The exact stale bill body: the live field names we hold, plus the stale
+  // markers. Nothing from the record's own vocabulary rides along.
+  const recordedBillKeys = [
+    "orderId",
+    "customerRef",
+    "status",
+    "providerStatus",
+    "billCategory",
+    "amountNgn",
+    "amountStableCoin",
+    "updated",
+    "stale",
+    "reason",
+  ];
+
+  it("sends a failed bill with a status the bills screen ends on", async () => {
+    (getBillStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 504));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("refunded"));
+
+    const res = await mainnet(request(makeApp()).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("refunded (failed)");
+    expect(res.body.providerStatus).toBe("refunded");
+    expect(Object.keys(res.body).sort()).toEqual([...recordedBillKeys].sort());
+  });
+
+  it("builds the stale bill body field by field, in the live field names", async () => {
+    (getBillStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 502));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("settled"));
+
+    const res = await mainnet(request(makeApp()).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+
+    expect(Object.keys(res.body).sort()).toEqual([...recordedBillKeys].sort());
+    // Amounts arrive as numbers, as the live answer carries them — not as
+    // the record's strings under the record's capitalisation.
+    expect(res.body.amountNgn).toBe(1000);
+    expect(res.body.amountStableCoin).toBe(0.75);
+    expect(res.body.updated).toBe("2026-10-02T18:00:00.000Z");
+    // The record's internal fields are not sent: no refund address under any
+    // name, no rate, no settled amounts, no hash.
+    expect(JSON.stringify(res.body)).not.toContain(G_ADDRESS);
+    for (const leaked of ["walletAddress", "kind", "coin", "rate", "provider", "settledNGN", "settledStableCoin", "txHash", "amountNGN", "updatedAt"]) {
+      expect(res.body[leaked]).toBeUndefined();
+    }
+  });
+
+  it("gives the stale bill the live answer's field names", async () => {
+    const app = makeApp();
+    (getBillStatus as jest.Mock).mockResolvedValue({
+      orderId: "9e4b1f2a",
+      customerRef: "u",
+      status: "settled",
+      billCategory: "airtime",
+      amountNgn: 1000,
+      amountStableCoin: 0.75,
+      wallet: "GDEPOSIT",
+      description: "airtime payment settled",
+      created: "2026-10-02T17:00:00Z",
+      updated: "2026-10-02T18:00:00Z",
+    });
+    const live = await mainnet(request(app).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+    expect(live.status).toBe(200);
+
+    (getBillStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 502));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("settled"));
+    const stale = await mainnet(request(app).get("/ngn/bills/9e4b1f2a?customerRef=u"));
+
+    // Every stale field is one the live answer uses, apart from the stale
+    // markers themselves. The live fields we do not hold — the deposit
+    // wallet, the description, the creation time — are left out, not
+    // invented.
+    for (const key of Object.keys(stale.body)) {
+      if (key === "stale" || key === "reason") continue;
+      expect(Object.keys(live.body)).toContain(key);
+    }
+    expect(stale.body.wallet).toBeUndefined();
+    expect(stale.body.description).toBeUndefined();
+    expect(stale.body.created).toBeUndefined();
+  });
+
+  it("answers a stale onramp order in the live field names, with providerStatus", async () => {
+    (getOnrampStatus as jest.Mock).mockRejectedValue(new LinqError("Could not reach Linq", 502));
+    (findNgnOrder as jest.Mock).mockResolvedValue({
+      orderId: "47ca0421",
+      customerRef: "u",
+      walletAddress: G_ADDRESS,
+      status: "settled",
+      kind: "onramp",
+      coin: "xlm",
+      amountStableCoin: "6",
+      amountNGN: "8137",
+      rate: "290",
+      billCategory: null,
+      provider: null,
+      settledStableCoin: null,
+      settledNGN: null,
+      txHash: null,
+      updatedAt: new Date("2026-10-02T18:00:00Z"),
+    });
+
+    const res = await mainnet(request(makeApp()).get("/ngn/onramp/orders/47ca0421?customerRef=u"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.stale).toBe(true);
+    // The live onramp route does not translate, so neither does the stale
+    // one; the provider's word is also kept as providerStatus, as on bills.
+    expect(res.body.status).toBe("settled");
+    expect(res.body.providerStatus).toBe("settled");
+    // Linq names the stablecoin amount `amount` in a status answer.
+    expect(res.body.amount).toBe(6);
+    expect(res.body.amountNgn).toBe(8137);
+    // The exact key set: the live fields we hold, plus providerStatus and
+    // the stale markers. The bank details exist only in the provider's
+    // answer, so they are left out rather than invented.
+    expect(Object.keys(res.body).sort()).toEqual(
+      ["orderId", "customerRef", "status", "providerStatus", "amount", "amountNgn", "stale", "reason"].sort(),
+    );
+    expect(JSON.stringify(res.body)).not.toContain(G_ADDRESS);
+  });
+
+  it("does not fall back on a 4xx from Linq on the onramp either", async () => {
+    (getOnrampStatus as jest.Mock).mockRejectedValue(new LinqError("Order not found", 404));
+    (findNgnOrder as jest.Mock).mockResolvedValue(recordedBill("settled"));
+
+    const res = await mainnet(request(makeApp()).get("/ngn/onramp/orders/47ca0421?customerRef=u"));
+
+    expect(res.status).toBe(404);
+    expect(res.body.stale).toBeUndefined();
   });
 
   // A 4xx is Linq telling us something true about the request. Papering over it

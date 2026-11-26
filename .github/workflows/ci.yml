@@ -29,7 +29,7 @@ jobs:
       # slow. The timeout kills jest outright so the output collected up to
       # that point is flushed and downloadable.
       - name: Unit tests
-        run: timeout -k 30s 900s npm test --if-present
+        run: timeout -k 30s 900s npm run test:coverage
 
   integration:
     name: Integration tests

@@ -1,18 +1,18 @@
 import "dotenv/config";
 import { createSourceSwitcherWithConfig, type SourceSwitcher } from "../indexer/sources";
-import { fetchEventsSafe, validateNetworkConfig } from "../rpc";
-import { parseEvents } from "../decoder";
+import { validateNetworkConfig } from "../rpc";
 import {
-  upsertTransfers,
-  upsertNftTransfers,
   getBackfillCursor,
   setBackfillCursor,
   clearBackfillCursor,
-  type BackfillCursorState,
   prisma,
 } from "../db";
-import { upsertHostFnLogs, parseHostFnEvent, type HostFnRecord } from "../indexer/host-fn-log";
-import { isNftTransferEvent, parseNftEvents } from "../ingester/nft";
+import type { Network } from "../network";
+import { resolveNetwork, isNetwork } from "../network";
+import { resolveWatchedContractIds } from "../indexer";
+import { resolveLpPoolIds, loadKnownLpPools } from "../indexer/lp-shares";
+import { initTokenCache } from "../tokenCache";
+import { processEventBatch, batchTotal, type BatchContext } from "../indexer/batch";
 
 const DEFAULT_CHUNK_SIZE = 64;
 const DEFAULT_CONCURRENCY = 4;
@@ -21,10 +21,19 @@ const BATCH_SIZE = parseInt(process.env.EVENTS_BATCH_SIZE ?? "10000", 10);
 export interface BackfillOptions {
   fromLedger: number;
   toLedger: number;
+  /** Target chain to backfill; defaults to `STELLAR_NETWORK` via `resolveNetwork`. */
+  network?: Network;
   chunkSize?: number;
   concurrency?: number;
   signal?: AbortSignal;
   force?: boolean;
+  /** Explicit contract watch-list override (`--contracts <id,id>`). */
+  contracts?: string[];
+  /**
+   * Emit live WebSocket/GraphQL/webhook notifications for backfilled records.
+   * Defaults to `false` so historical catch-up never replays old transfers as new.
+   */
+  notifyLive?: boolean;
 }
 
 export interface Chunk {
@@ -41,20 +50,41 @@ export function chunkRange(from: number, to: number, chunkSize: number): Chunk[]
   return chunks;
 }
 
-function resolveContractIds(): string[] {
-  const raw =
-    process.env.SAC_CONTRACT_IDS ||
-    process.env.CONTRACT_IDS ||
-    "";
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+/**
+ * Resolve the contract IDs a backfill will request for `network`.
+ *
+ * Uses the live indexer's own `resolveWatchedContractIds(network)` unless the
+ * caller supplied an explicit `override` (`--contracts <id,id>`). Refuses an
+ * empty watch list in both cases: `fetchEvents` omits the contract filter when
+ * handed `[]`, which would pull every contract event on the chain.
+ */
+export function resolveBackfillContractIds(
+  network: Network,
+  override?: string[],
+): string[] {
+  const ids =
+    override !== undefined
+      ? [...new Set(override.map((s) => s.trim()).filter(Boolean))]
+      : resolveWatchedContractIds(network);
+
+  if (ids.length === 0) {
+    const suffix = network.toUpperCase();
+    throw new Error(
+      `[backfill/${network}] No contracts to watch on ${network}. ` +
+        `Set SAC_CONTRACT_IDS_${suffix} and/or NFT_CONTRACT_IDS_${suffix} ` +
+        `(or pass --contracts <id,id>). An empty watch list is refused because ` +
+        `it would fetch every contract event on the chain.`,
+    );
+  }
+
+  return ids;
 }
 
-function createSource(): SourceSwitcher {
+function createSource(network: Network): SourceSwitcher {
+  const suffix = network.toUpperCase();
   return createSourceSwitcherWithConfig({
-    horizonUrl: process.env.HORIZON_URL,
+    network,
+    horizonUrl: process.env[`HORIZON_URL_${suffix}`] || process.env.HORIZON_URL || undefined,
     horizonEventsPath: process.env.HORIZON_EVENTS_PATH,
     fetchImpl: (globalThis as {
       fetch?: (input: string, init?: Record<string, unknown>) => Promise<{
@@ -71,6 +101,7 @@ async function processChunk(
   chunk: Chunk,
   contracts: string[],
   source: SourceSwitcher,
+  ctx: BatchContext,
   signal?: AbortSignal,
 ): Promise<number> {
   if (signal?.aborted) return 0;
@@ -89,84 +120,57 @@ async function processChunk(
   );
   if (relevant.length === 0) return 0;
 
-  const fungible = relevant.filter((e) => !isNftTransferEvent(e));
-  const nft = relevant.filter((e) => isNftTransferEvent(e));
-
-  let totalInserted = 0;
-
-  if (fungible.length > 0) {
-    try {
-      const records = parseEvents(fungible);
-      if (records.length > 0) {
-        const inserted = await upsertTransfers(records);
-        totalInserted += inserted;
-      }
-    } catch (err) {
-      console.error(`[backfill] Fungible parse error in chunk ${chunk.start}-${chunk.end}:`, err);
-    }
-  }
-
-  if (nft.length > 0) {
-    try {
-      const parsed = parseNftEvents(nft);
-      if (parsed.length > 0) {
-        const inserted = await upsertNftTransfers(parsed.map((p) => p.record));
-        totalInserted += inserted;
-      }
-    } catch (err) {
-      console.error(`[backfill] NFT parse error in chunk ${chunk.start}-${chunk.end}:`, err);
-    }
-  }
-
   try {
-    const hostFnRecords = relevant
-      .map((e) => {
-        try { return parseHostFnEvent(e); } catch { return null; }
-      })
-      .filter((r): r is HostFnRecord => r !== null);
-    if (hostFnRecords.length > 0) {
-      await upsertHostFnLogs(hostFnRecords);
-    }
+    const result = await processEventBatch(relevant, ctx);
+    return batchTotal(result);
   } catch (err) {
-    console.error(`[backfill] HostFn log error in chunk ${chunk.start}-${chunk.end}:`, err);
+    console.error(`[backfill] Chunk ${chunk.start}-${chunk.end} failed:`, err);
+    return 0;
   }
-
-  return totalInserted;
 }
 
 export async function runBackfill(options: BackfillOptions): Promise<void> {
   const {
     fromLedger,
     toLedger,
+    network,
     chunkSize = DEFAULT_CHUNK_SIZE,
     concurrency = DEFAULT_CONCURRENCY,
     signal,
     force,
+    notifyLive = false,
   } = options;
 
-  validateNetworkConfig();
+  if (options.network !== undefined && !isNetwork(options.network)) {
+    throw new Error(
+      `[backfill] Invalid network "${String(options.network)}". Expected "testnet" or "mainnet".`,
+    );
+  }
+  const net = resolveNetwork(options.network);
 
-  const contracts = resolveContractIds();
+  validateNetworkConfig([net]);
 
-  let cursor = await getBackfillCursor();
+  const contracts = resolveBackfillContractIds(net, options.contracts);
+
+  let cursor = await getBackfillCursor(net);
   if (cursor) {
     if (cursor.startLedger === fromLedger && cursor.endLedger === toLedger) {
       if (cursor.nextLedger >= toLedger) {
-        console.log("[backfill] Range already fully processed.");
-        await clearBackfillCursor();
+        console.log(`[backfill/${net}] Range already fully processed.`);
+        await clearBackfillCursor(net);
         return;
       }
       console.log(
-        `[backfill] Resuming from cursor: nextLedger=${cursor.nextLedger} (${fromLedger} → ${toLedger})`,
+        `[backfill/${net}] Resuming from cursor: nextLedger=${cursor.nextLedger} (${fromLedger} → ${toLedger})`,
       );
     } else if (force) {
       console.log(
-        `[backfill] Forcing new range ${fromLedger}→${toLedger} (cursor was ${cursor.startLedger}→${cursor.endLedger})`,
+        `[backfill/${net}] Forcing new range ${fromLedger}→${toLedger} (cursor was ${cursor.startLedger}→${cursor.endLedger})`,
       );
       cursor = { startLedger: fromLedger, endLedger: toLedger, nextLedger: fromLedger };
     } else {
       console.warn(
-        `[backfill] Existing cursor (${cursor.startLedger}→${cursor.endLedger}) differs from requested range ` +
+        `[backfill/${net}] Existing cursor (${cursor.startLedger}→${cursor.endLedger}) differs from requested range ` +
         `(${fromLedger}→${toLedger}). Use --force to override.`,
       );
       return;
@@ -175,33 +179,50 @@ export async function runBackfill(options: BackfillOptions): Promise<void> {
     cursor = { startLedger: fromLedger, endLedger: toLedger, nextLedger: fromLedger };
   }
 
-  const source = createSource();
   const chunks = chunkRange(cursor.nextLedger, toLedger, chunkSize);
 
   if (chunks.length === 0) {
-    console.log("[backfill] No chunks to process.");
-    await clearBackfillCursor();
+    console.log(`[backfill/${net}] No chunks to process.`);
+    await clearBackfillCursor(net);
     return;
   }
 
+  const source = createSource(net);
+
+  await initTokenCache(net).catch(() => undefined);
+
+  const knownLpPools = new Set<string>(resolveLpPoolIds(net));
+  try {
+    for (const poolId of await loadKnownLpPools(net)) {
+      knownLpPools.add(poolId);
+    }
+  } catch {
+    console.error(`[backfill/${net}] Could not seed known LP pools from database`);
+  }
+
+  const batchCtx: BatchContext = {
+    network: net,
+    knownLpPools,
+    notifyLive,
+  };
+
   console.log(
-    `[backfill] Processing ${chunks.length} chunks (size=${chunkSize}, concurrency=${concurrency})`,
-    contracts.length > 0 ? `contracts=[${contracts.join(",")}]` : "(all contracts)",
+    `[backfill/${net}] Processing ${chunks.length} chunks (size=${chunkSize}, concurrency=${concurrency})`,
+    `contracts=[${contracts.join(",")}]`,
   );
 
   let totalInserted = 0;
-  const totalChunks = chunks.length;
 
   for (let i = 0; i < chunks.length; i += concurrency) {
     if (signal?.aborted) {
-      console.log("[backfill] Aborting — signal received.");
+      console.log(`[backfill/${net}] Aborting — signal received.`);
       return;
     }
 
     const wave = chunks.slice(i, i + concurrency);
     const results = await Promise.all(
       wave.map((c) =>
-        processChunk(c, contracts, source, signal).catch((err) => {
+        processChunk(c, contracts, source, batchCtx, signal).catch((err) => {
           console.error(`[backfill] Chunk ${c.start}-${c.end} failed:`, err);
           return 0;
         }),
@@ -213,19 +234,19 @@ export async function runBackfill(options: BackfillOptions): Promise<void> {
 
     const lastChunk = wave[wave.length - 1];
     cursor.nextLedger = lastChunk.end;
-    await setBackfillCursor(cursor);
+    await setBackfillCursor(cursor, net);
 
-    const pct = ((lastChunk.end - fromLedger) / (toLedger - fromLedger) * 100).toFixed(1);
+    const pct = (((lastChunk.end - fromLedger) / (toLedger - fromLedger)) * 100).toFixed(1);
     const waveNum = Math.floor(i / concurrency) + 1;
     console.log(
-      `[backfill] Wave ${waveNum} done — ledger ${lastChunk.end} (${pct}%), ${totalInserted} events inserted`,
+      `[backfill/${net}] Wave ${waveNum} done — ledger ${lastChunk.end} (${pct}%), ${totalInserted} records inserted`,
     );
   }
 
   console.log(
-    `[backfill] Complete — ${totalInserted} events inserted across ledgers ${fromLedger}→${toLedger}`,
+    `[backfill/${net}] Complete — ${totalInserted} records inserted across ledgers ${fromLedger}→${toLedger}`,
   );
 
-  await clearBackfillCursor();
+  await clearBackfillCursor(net);
   await prisma.$disconnect();
 }

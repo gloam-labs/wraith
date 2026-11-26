@@ -61,12 +61,49 @@ export function validateNetworkConfig(networks: Network[] = [currentNetwork()]):
 // never share one — which was impossible with the previous single singleton.
 const clients = new Map<Network, RPC.Server>();
 
+export const DEFAULT_RPC_TIMEOUT_MS = 15_000;
+
+let warnedInvalidRpcTimeout = false;
+
+/**
+ * Resolve the timeout for RPC calls in milliseconds.
+ * Reads `RPC_TIMEOUT_MS`, falling back to 15000ms if unset or empty.
+ * If set to a value that is not a positive whole number, falls back to the
+ * default with one warning and does not stop the process.
+ */
+export function resolveRpcTimeout(): number {
+  const raw = process.env.RPC_TIMEOUT_MS;
+  if (raw === undefined || raw === "") {
+    return DEFAULT_RPC_TIMEOUT_MS;
+  }
+  const trimmed = raw.trim();
+  const isPositiveInteger = /^[1-9]\d*$/.test(trimmed) && Number.isSafeInteger(Number(trimmed));
+  if (!isPositiveInteger) {
+    if (!warnedInvalidRpcTimeout) {
+      console.warn(
+        `[rpc] Invalid RPC_TIMEOUT_MS="${raw}": must be a positive whole number. Falling back to default (${DEFAULT_RPC_TIMEOUT_MS}ms).`
+      );
+      warnedInvalidRpcTimeout = true;
+    }
+    return DEFAULT_RPC_TIMEOUT_MS;
+  }
+  return Number(trimmed);
+}
+
 export function getRpc(network?: Network): RPC.Server {
   const net = resolveNetwork(network);
   let client = clients.get(net);
   if (!client) {
     const url = resolveRpcUrl(net);
-    client = new RPC.Server(url, { allowHttp: url.startsWith("http://") });
+    const timeout = resolveRpcTimeout();
+    client = new RPC.Server(url, {
+      allowHttp: url.startsWith("http://"),
+      timeout,
+    });
+    (client as any).timeout = timeout;
+    if ((client as any).httpClient?.defaults) {
+      (client as any).httpClient.defaults.timeout = timeout;
+    }
     clients.set(net, client);
   }
   return client;
@@ -75,6 +112,7 @@ export function getRpc(network?: Network): RPC.Server {
 /** Test-only: drops cached clients so a test can rebind env or mocks. */
 export function _resetRpcClients(): void {
   clients.clear();
+  warnedInvalidRpcTimeout = false;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
