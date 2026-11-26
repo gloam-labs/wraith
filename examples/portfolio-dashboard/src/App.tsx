@@ -35,7 +35,7 @@ interface TransfersResponse {
 }
 
 function App() {
-  const [address, setAddress] = useState('GABCDEFGHIJKLMNOPQRSTUVWXYZ');
+  const [address, setAddress] = useState('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF');
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [transfers, setTransfers] = useState<TransfersResponse | null>(null);
   const [loading, setLoading] = useState(false);

@@ -149,7 +149,7 @@ Expected response:
       "id": 1,
       "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
       "eventType": "transfer",
-      "fromAddress": "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWWHF",
+      "fromAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEGWF",
       "toAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
       "amount": "10000000",
       "displayAmount": "1.0000000",
@@ -160,15 +160,15 @@ Expected response:
     },
     {
       "id": 2,
-      "contractId": "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBD2KM",
+      "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
       "eventType": "transfer",
-      "fromAddress": "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCWWHF",
+      "fromAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGO6V",
       "toAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
       "amount": "40000000",
       "displayAmount": "4.0000000",
       "ledger": 2004,
       "ledgerClosedAt": "2025-02-01T00:00:00.000Z",
-      "txHash": "txhash-integration-multi",
+      "txHash": "e6a506f95d3cd66a8ab3c0fbb9b47ab4a5d4ed35fb401c202a18a8c3d3231faa",
       "eventId": "integration-004"
     }
   ]
@@ -262,15 +262,15 @@ console.log(data);
 
 ```bash
 # curl — all incoming transfers
-curl "http://localhost:3000/transfers/incoming/GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+curl "http://localhost:3000/transfers/incoming/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 
 # curl — filter by date window and page size
-curl "http://localhost:3000/transfers/incoming/GABCDEFGHIJKLMNOPQRSTUVWXYZ?fromDate=2025-01-01T00:00:00Z&limit=10"
+curl "http://localhost:3000/transfers/incoming/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF?fromDate=2025-01-01T00:00:00Z&limit=10"
 ```
 
 ```js
 // fetch
-const ADDRESS = "GABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ADDRESS = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const res = await fetch(
   `http://localhost:3000/transfers/incoming/${ADDRESS}?fromDate=2025-01-01T00:00:00Z&limit=10`
 );
@@ -282,7 +282,7 @@ console.log(data);
 // axios
 import axios from "axios";
 
-const ADDRESS = "GABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ADDRESS = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const { data } = await axios.get(
   `http://localhost:3000/transfers/incoming/${ADDRESS}`,
   {
@@ -303,10 +303,10 @@ console.log(data);
 //   "transfers": [
 //     {
 //       "id": 12345,
-//       "contractId": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B",
+//       "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 //       "eventType": "transfer",
-//       "fromAddress": "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
-//       "toAddress":   "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
+//       "fromAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+//       "toAddress":   "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
 //       "amount":        "10000000000",
 //       "displayAmount": "1000.0000000",
 //       "ledger": 51234567,
@@ -331,13 +331,13 @@ console.log(data);
 
 ```bash
 # curl
-curl "http://localhost:3000/transfers/address/GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+curl "http://localhost:3000/transfers/address/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 ```
 
 ```js
 // fetch — with optional token-contract filter
-const ADDRESS = "GABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const CONTRACT = "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B";
+const ADDRESS = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const CONTRACT = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM";
 const res = await fetch(
   `http://localhost:3000/transfers/address/${ADDRESS}?contractId=${CONTRACT}&limit=20`
 );
@@ -355,10 +355,10 @@ console.log(data);
 //   "transfers": [
 //     {
 //       "id": 12345,
-//       "contractId": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B",
+//       "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 //       "eventType": "transfer",
-//       "fromAddress": "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
-//       "toAddress":   "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
+//       "fromAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+//       "toAddress":   "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
 //       "amount":        "10000000000",
 //       "displayAmount": "1000.0000000",
 //       "ledger": 51234567,
@@ -377,12 +377,12 @@ console.log(data);
 
 ```bash
 # curl
-curl "http://localhost:3000/summary/GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+curl "http://localhost:3000/summary/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 ```
 
 ```js
 // fetch — narrow to a date window
-const ADDRESS = "GABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ADDRESS = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const res = await fetch(
   `http://localhost:3000/summary/${ADDRESS}?fromDate=2025-01-01T00:00:00Z&toDate=2025-01-31T23:59:59Z`
 );
@@ -391,14 +391,14 @@ console.log(data);
 
 // Expected response
 // {
-//   "address": "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
+//   "address": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
 //   "window": {
 //     "fromDate": "2025-01-01T00:00:00Z",
 //     "toDate":   "2025-01-31T23:59:59Z"
 //   },
 //   "tokens": [
 //     {
-//       "contractId":          "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B",
+//       "contractId":          "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 //       "totalReceived":       "50000000000",
 //       "totalSent":           "10000000000",
 //       "netFlow":             "40000000000",
@@ -822,7 +822,7 @@ Responses are transformed to the JSON:API document structure:
 
 ```bash
 # Request with JSON:API Accept header
-curl -H "Accept: application/vnd.api+json" http://localhost:3000/transfers/address/GABC123...
+curl -H "Accept: application/vnd.api+json" http://localhost:3000/transfers/address/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 # Response
 {
@@ -833,12 +833,12 @@ curl -H "Accept: application/vnd.api+json" http://localhost:3000/transfers/addre
       "attributes": {
         "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
         "eventType": "transfer",
-        "fromAddress": "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWWHF",
+        "fromAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEGWF",
         "toAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
         "amount": "10000000",
         "ledger": 1001,
         "ledgerClosedAt": "2025-01-01T00:00:00.000Z",
-        "txHash": "aaaa1111",
+        "txHash": "e6a506f95d3cd66a8ab3c0fbb9b47ab4a5d4ed35fb401c202a18a8c3d3231faa",
         "displayAmount": "1.0000000"
       }
     }
@@ -854,7 +854,7 @@ curl -H "Accept: application/vnd.api+json" http://localhost:3000/transfers/addre
 ### Example: Summary in JSON:API Format
 
 ```bash
-curl -H "Accept: application/vnd.api+json" http://localhost:3000/summary/GABC123...
+curl -H "Accept: application/vnd.api+json" http://localhost:3000/summary/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 {
   "data": [
@@ -969,16 +969,16 @@ Retrieve transfer histories (transfers, mints, burns, clawbacks) for any Stellar
 
 ```bash
 # Get all transfers for a specific account (pretty ASCII table by default)
-npx @veil/wraith-cli transfers --account GABCDEFGHIJKLMNOPQRSTUVWXYZ
+npx @veil/wraith-cli transfers --account GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 # Filter transfers to a specific token contract
-npx @veil/wraith-cli transfers --account GABCDEFGHIJKLMNOPQRSTUVWXYZ --contract CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B
+npx @veil/wraith-cli transfers --account GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --contract CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM
 
 # Retrieve only incoming transfers with custom pagination and limit
-npx @veil/wraith-cli transfers --account GABCDEFGHIJKLMNOPQRSTUVWXYZ --direction incoming --limit 10 --offset 0
+npx @veil/wraith-cli transfers --account GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --direction incoming --limit 10 --offset 0
 
 # Emit parseable JSON for scripts or piping
-npx @veil/wraith-cli transfers --account GABCDEFGHIJKLMNOPQRSTUVWXYZ --json
+npx @veil/wraith-cli transfers --account GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --json
 ```
 
 #### 2. Account summaries
@@ -986,13 +986,13 @@ Get a grouped summary of token balances, incoming/outgoing flows, and transactio
 
 ```bash
 # View aggregate token statistics for an address
-npx @veil/wraith-cli summary GABCDEFGHIJKLMNOPQRSTUVWXYZ
+npx @veil/wraith-cli summary GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 # Narrow down the summary to a specific timeframe
-npx @veil/wraith-cli summary GABCDEFGHIJKLMNOPQRSTUVWXYZ --from-date 2025-01-01T00:00:00Z --to-date 2025-01-31T23:59:59Z
+npx @veil/wraith-cli summary GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --from-date 2025-01-01T00:00:00Z --to-date 2025-01-31T23:59:59Z
 
 # Get raw JSON output
-npx @veil/wraith-cli summary GABCDEFGHIJKLMNOPQRSTUVWXYZ --json
+npx @veil/wraith-cli summary GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --json
 ```
 
 #### 3. Live watch (Streaming)
@@ -1000,13 +1000,13 @@ Establish a real-time WebSocket connection to stream new transfers as soon as th
 
 ```bash
 # Stream all incoming/outgoing transfers for a specific address in real time
-npx @veil/wraith-cli watch GABCDEFGHIJKLMNOPQRSTUVWXYZ
+npx @veil/wraith-cli watch GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 # Stream live events filtered by a specific token contract
-npx @veil/wraith-cli watch GABCDEFGHIJKLMNOPQRSTUVWXYZ --contract CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B
+npx @veil/wraith-cli watch GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --contract CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM
 
 # Output live streams as a sequence of raw JSON lines (perfect for logging/scripting)
-npx @veil/wraith-cli watch GABCDEFGHIJKLMNOPQRSTUVWXYZ --json
+npx @veil/wraith-cli watch GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --json
 ```
 
 #### 4. Webhook Management

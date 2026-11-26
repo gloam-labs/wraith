@@ -47,6 +47,7 @@ const mockGetLatestLedger = getLatestLedger as jest.MockedFunction<typeof getLat
 const mockQueryRaw = prisma.$queryRaw as jest.MockedFunction<typeof prisma.$queryRaw>;
 
 const ALICE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const VALID_TX_HASH = "e6a506f95d3cd66a8ab3c0fbb9b47ab4a5d4ed35fb401c202a18a8c3d3231faa";
 
 const emptyPage = { total: 0, transfers: [], nextCursor: null };
 
@@ -125,7 +126,7 @@ describe("API network selector (#163)", () => {
 
       await request(app).get(`/transfers/outgoing/${ALICE}?network=mainnet`).expect(200);
       await request(app).get(`/transfers/address/${ALICE}?network=mainnet`).expect(200);
-      await request(app).get("/transfers/tx/deadbeef?network=mainnet").expect(200);
+      await request(app).get(`/transfers/tx/${VALID_TX_HASH}?network=mainnet`).expect(200);
       await request(app).get(`/summary/${ALICE}?network=mainnet`).expect(200);
 
       expect(mockQueryTransfers).toHaveBeenCalledWith(
@@ -134,7 +135,7 @@ describe("API network selector (#163)", () => {
       expect(mockQueryAllTransfers).toHaveBeenCalledWith(
         expect.objectContaining({ network: "mainnet" }),
       );
-      expect(mockQueryByTxHash).toHaveBeenCalledWith("deadbeef", "mainnet");
+      expect(mockQueryByTxHash).toHaveBeenCalledWith(VALID_TX_HASH, "mainnet");
       expect(mockQuerySummary).toHaveBeenCalledWith(
         expect.objectContaining({ network: "mainnet" }),
       );

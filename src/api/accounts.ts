@@ -3,7 +3,7 @@ import { getAccountSummary, queryBalances } from "../db";
 import { toDisplayAmount } from "../amount";
 import { createAccountsTransfersRouter } from "../routes/accounts/transfers";
 import { parseOr400 } from "../openapi/validation";
-import { summaryQuerySchema } from "../openapi/schemas";
+import { addressPathSchema, summaryQuerySchema } from "../openapi/schemas";
 import { requestNetwork } from "../middleware/network";
 import { getCachedTokenDecimals } from "../tokenCache";
 
@@ -43,7 +43,9 @@ export function createAccountsRouter(): Router {
     "/:address/balance",
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const address = req.params.address as string;
+        const parsed = parseOr400(addressPathSchema, req.params, res);
+        if (!parsed) return;
+        const { address } = parsed;
         const network = requestNetwork(req);
         const rows = await queryBalances(address, network);
 

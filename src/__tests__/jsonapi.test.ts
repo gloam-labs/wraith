@@ -9,6 +9,9 @@ function makeApp() {
   return app;
 }
 
+const ALICE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const CONTRACT_A = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM";
+
 describe("JSON:API middleware", () => {
   it("passes through for non-JSON:API Accept header", async () => {
     const app = makeApp();
@@ -25,12 +28,12 @@ describe("JSON:API middleware", () => {
     app.get("/transfers/address/:address", (_req: Request, res: Response) => res.json({
       total: 2,
       transfers: [
-        { eventId: "evt-1", contractId: "C1", amount: "10000000000", ledger: 123 },
-        { eventId: "evt-2", contractId: "C2", amount: "20000000000", ledger: 124 },
+        { eventId: "evt-1", contractId: CONTRACT_A, amount: "10000000000", ledger: 123 },
+        { eventId: "evt-2", contractId: CONTRACT_A, amount: "20000000000", ledger: 124 },
       ],
     }));
 
-    const res = await request(app).get("/transfers/address/GABC").set("Accept", "application/vnd.api+json");
+    const res = await request(app).get(`/transfers/address/${ALICE}`).set("Accept", "application/vnd.api+json");
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/vnd.api+json");
@@ -38,7 +41,7 @@ describe("JSON:API middleware", () => {
     expect(res.body.data[0]).toMatchObject({
       id: "evt-1",
       type: "transfer",
-      attributes: { contractId: "C1", amount: "10000000000", ledger: 123 },
+      attributes: { contractId: CONTRACT_A, amount: "10000000000", ledger: 123 },
     });
     expect(res.body.meta.total).toBe(2);
   });
@@ -46,25 +49,25 @@ describe("JSON:API middleware", () => {
   it("transforms summary/token responses to JSON:API format", async () => {
     const app = makeApp();
     app.get("/summary/:address", (_req: Request, res: Response) => res.json({
-      address: "GABC",
+      address: ALICE,
       window: { fromDate: null, toDate: null },
       tokens: [
-        { contractId: "C1", totalReceived: "500", totalSent: "100", txCount: 5 },
-        { contractId: "C2", totalReceived: "300", totalSent: "50", txCount: 3 },
+        { contractId: CONTRACT_A, totalReceived: "500", totalSent: "100", txCount: 5 },
+        { contractId: CONTRACT_A, totalReceived: "300", totalSent: "50", txCount: 3 },
       ],
     }));
 
-    const res = await request(app).get("/summary/GABC").set("Accept", "application/vnd.api+json");
+    const res = await request(app).get(`/summary/${ALICE}`).set("Accept", "application/vnd.api+json");
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/vnd.api+json");
     expect(res.body.data).toHaveLength(2);
     expect(res.body.data[0]).toMatchObject({
-      id: "C1",
+      id: CONTRACT_A,
       type: "token-summary",
-      attributes: { contractId: "C1", totalReceived: "500", totalSent: "100", txCount: 5 },
+      attributes: { contractId: CONTRACT_A, totalReceived: "500", totalSent: "100", txCount: 5 },
     });
-    expect(res.body.meta.address).toBe("GABC");
+    expect(res.body.meta.address).toBe(ALICE);
   });
 
   it("transforms popular assets responses to JSON:API format", async () => {
@@ -115,22 +118,22 @@ describe("JSON:API middleware", () => {
   it("transforms NFT owner responses to JSON:API format", async () => {
     const app = makeApp();
     app.get("/nfts/owners/:contract/:token_id", (_req: Request, res: Response) => res.json({
-      contract: "C1",
+      contract: CONTRACT_A,
       token_id: "1",
-      owner: "GOWNER",
+      owner: ALICE,
       metadata: null,
     }));
 
-    const res = await request(app).get("/nfts/owners/C1/1").set("Accept", "application/vnd.api+json");
+    const res = await request(app).get(`/nfts/owners/${CONTRACT_A}/1`).set("Accept", "application/vnd.api+json");
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/vnd.api+json");
     expect(res.body.data).toMatchObject({
-      id: "C1-1",
+      id: `${CONTRACT_A}-1`,
       type: "nft-owner",
-      attributes: { contract: "C1", token_id: "1", owner: "GOWNER" },
+      attributes: { contract: CONTRACT_A, token_id: "1", owner: ALICE },
     });
-    expect(res.body.meta.contract).toBe("C1");
+    expect(res.body.meta.contract).toBe(CONTRACT_A);
   });
 
   it("returns null data for NFT owner when no owner exists", async () => {

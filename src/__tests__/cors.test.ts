@@ -94,7 +94,7 @@ describe("the surface policy", () => {
   it.each([
     // Deliberately open: public chain data, and prices.
     ["GET", "/tokens", "open"],
-    ["GET", "/accounts/GABC/transfers", "open"],
+    ["GET", "/accounts/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF/transfers", "open"],
     ["GET", "/fees", "open"],
     ["POST", "/graphql", "open"],
     ["GET", "/offramp/rate", "open"],

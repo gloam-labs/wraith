@@ -28,6 +28,7 @@ describe("Accounts route handlers", () => {
   describe("GET /accounts/:address/balance", () => {
     const ALICE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
     const CONTRACT_A = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM";
+    const UNKNOWN_ADDRESS = "GA5WUJ54Z23KILLCUOUNAKTPBVZWKMQVO4O6EQ5GHLAERIMLLHNCSKYH";
 
     beforeEach(() => {
       mockQueryBalances.mockReset();
@@ -65,10 +66,35 @@ describe("Accounts route handlers", () => {
     it("returns an empty balances array for an unknown address", async () => {
       mockQueryBalances.mockResolvedValue([]);
 
-      const res = await request(app).get(`/accounts/GUNKNOWN/balance`);
+      const res = await request(app).get(`/accounts/${UNKNOWN_ADDRESS}/balance`);
 
       expect(res.status).toBe(200);
       expect(res.body.balances).toHaveLength(0);
+    });
+
+    it("returns 400 for an invalid address", async () => {
+      const res = await request(app).get(`/accounts/GUNKNOWN/balance`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Invalid Stellar address");
+      expect(mockQueryBalances).not.toHaveBeenCalled();
+    });
+
+    it("accepts every address kind the indexer stores", async () => {
+      const addressKinds = [
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", // Ed25519 public key
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM", // Contract
+        "MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB5IG", // Muxed account
+        "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFMUE", // Claimable balance
+        "LAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABLIR", // Liquidity pool
+      ];
+
+      for (const addr of addressKinds) {
+        mockQueryBalances.mockResolvedValueOnce([]);
+        const res = await request(app).get(`/accounts/${addr}/balance`);
+        expect(res.status).toBe(200);
+        expect(mockQueryBalances).toHaveBeenCalledWith(addr, "testnet");
+      }
     });
 
     it("says the figure is derived, not read from chain", async () => {
