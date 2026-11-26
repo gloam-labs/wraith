@@ -197,6 +197,18 @@ export async function reconcileNgnOrder(event: {
   const wasTerminal = terminalStatusOf(existing.status);
   const isTerminal = terminalStatusOf(status);
 
+  // Never let a late non-terminal event (such as an out-of-order
+  // `order.processing` webhook or a stale poll from the sweep) move a finished
+  // order back to in-flight or overwrite its settled figures. Terminal-to-
+  // terminal transitions (e.g. completed -> refunded) remain allowed because a
+  // refund after completion is a real state change.
+  if (wasTerminal && !isTerminal) {
+    console.warn(
+      `[linq] ignoring late non-terminal status "${status}" for ${existing.kind} order ${event.orderId} (already "${existing.status}")`,
+    );
+    return true;
+  }
+
   // Cross-check the provider's naira figure against the one we created the
   // order with. This is the only place both numbers exist: the router has the
   // webhook but not the row, so its band check cannot see a scale error at all

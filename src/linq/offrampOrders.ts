@@ -48,6 +48,18 @@ export async function reconcileOfframpOrder(
   const wasTerminal = terminalStatusOf(existing.status);
   const isTerminal = terminalStatusOf(status);
 
+  // Never let a late non-terminal event (such as an out-of-order
+  // `order.processing` webhook or a stale poll from the sweep) move a finished
+  // order back to in-flight or overwrite its settled figures. Terminal-to-
+  // terminal transitions (e.g. completed -> refunded) remain allowed because a
+  // refund after completion is a real state change.
+  if (wasTerminal && !isTerminal) {
+    console.warn(
+      `[linq] ignoring late non-terminal status "${status}" for offramp order ${event.orderId} (already "${existing.status}")`,
+    );
+    return true;
+  }
+
   await prisma.offrampOrder.update({
     where: { network_orderId: { network, orderId: event.orderId } },
     data: {

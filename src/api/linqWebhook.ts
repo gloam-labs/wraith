@@ -86,7 +86,7 @@ export function createLinqWebhookRouter(): Router {
           return;
         }
 
-        // Idempotent per event: the update targets a row keyed on
+        // Idempotent and terminal-order-safe: the update targets a row keyed on
         // (network, orderId) and writes the settled figures. A redelivery of
         // the SAME event writes the same values a second time, which is a
         // no-op rather than a double-count (pinned in
@@ -94,10 +94,12 @@ export function createLinqWebhookRouter(): Router {
         // Nothing here creates a row - an event for an order we never placed
         // is not ours to act on.
         //
-        // Not order-safe, though: the last delivery wins. A late redelivery
-        // of `order.processing` arriving after `order.completed` sets the
-        // status back to processing. Nothing is counted twice, but the row
-        // reads wrong until the next status poll corrects it.
+        // Order-safe for finished orders: a late non-terminal delivery (such as
+        // `order.processing` arriving after `order.completed` or `order.failed`)
+        // is logged once and ignored without touching status or settled amounts.
+        // A different terminal status (e.g. `refunded` after `completed`) may
+        // still replace an earlier terminal status, while `orders_terminal_total`
+        // counts only the initial non-terminal -> terminal transition.
         const network = resolveEventNetwork(event);
         if (!network) {
           console.warn(`[linq] webhook for order ${event.orderId} names an invalid network`);

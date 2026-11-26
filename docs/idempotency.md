@@ -101,10 +101,16 @@ A redelivered event writes the same values again: one row, nothing counted twice
 (tested for both the offramp and the onramp/bill tables). `recordNgnOrder` is
 likewise an upsert on `(network, orderId)`.
 
-**Not order-safe.** The last delivery wins. A late redelivery of `order.processing`
-that arrives after `order.completed` sets the status back to processing until the
-next status poll corrects it. This is not a double-count, but the row reads wrong
-in the meantime.
+**Order-safe for finished orders.** Both `reconcileOfframpOrder` and
+`reconcileNgnOrder` refuse to replace a terminal status (decided by
+`terminalStatusOf` in `src/metrics.ts`) with a non-terminal one. A late
+redelivery of `order.processing` arriving after `order.completed` or
+`order.failed` is logged once and ignored — leaving status and settled amounts
+untouched, preventing the periodic sweep from re-polling a finished order, and
+ensuring `orders_terminal_total` counts each order's ending exactly once in any
+delivery order. A different terminal status (such as `refunded` after
+`completed`) may still replace an earlier terminal status, because a refund
+after completion is a real state change.
 
 ### `POST /ngn/onramp/orders` and `POST /ngn/bills`: **not idempotent**
 
