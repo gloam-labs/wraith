@@ -1,6 +1,6 @@
 # Wraith 👻
 
-[![CI](https://github.com/Miracle656/wraith/actions/workflows/ci.yml/badge.svg)](https://github.com/Miracle656/wraith/actions/workflows/ci.yml)
+[![CI](https://github.com/gloam-labs/wraith/actions/workflows/ci.yml/badge.svg)](https://github.com/gloam-labs/wraith/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Stellar](https://img.shields.io/badge/Stellar-Soroban-black)](https://stellar.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -93,7 +93,7 @@ STELLAR_NETWORK="mainnet"
 SOROBAN_RPC_URL_MAINNET="https://mainnet.stellar.validationcloud.io/v1/<YOUR_API_KEY>"
 
 # Strongly recommended on mainnet: filter to specific contracts to reduce load
-SAC_CONTRACT_IDS="CTOKEN1...,CTOKEN2..."
+SAC_CONTRACT_IDS="CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM,CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBD2KM"
 START_LEDGER=
 PORT=3000
 ```
@@ -221,7 +221,7 @@ You can use this file to explore the API, generate client SDKs, or import it int
 
 Browse the complete generated API reference for Wraith's public modules:
 
-- **[TypeDoc API Reference](https://miracle656.github.io/wraith/)**
+- **[TypeDoc API Reference](https://gloam-labs.github.io/wraith/)**
 
 This includes full JSDoc documentation for all modules, types, and functions.
 
@@ -229,7 +229,7 @@ This includes full JSDoc documentation for all modules, types, and functions.
 
 ## Usage Examples
 
-Replace `GABC…WXYZ` with a real Stellar address and `http://localhost:3000` with your server's base URL.
+The examples below use deterministic seed data addresses (such as `GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF` for Alice and `CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM` for Token A) and assume your server's base URL is `http://localhost:3000`.
 
 ### `GET /status` — Health check
 
@@ -244,15 +244,72 @@ const res = await fetch("http://localhost:3000/status");
 const data = await res.json();
 console.log(data);
 
-// Expected response
+// Expected response (healthy)
 // {
 //   "ok": true,
+//   "status": "healthy",
+//   "network": "testnet",
 //   "lastIndexedLedger": 51234567,
+//   "last_indexed_ledger": 51234567,
 //   "latestLedger": 51234568,
 //   "lagLedgers": 1,
 //   "startedAt": "2025-01-01T00:00:00.000Z",
 //   "uptimeSeconds": 3600,
-//   "totalIndexed": 15000
+//   "totalIndexed": 15000,
+//   "networks": {
+//     "testnet": {
+//       "lastIndexedLedger": 51234567,
+//       "latestLedger": 51234568,
+//       "lagLedgers": 1,
+//       "running": true
+//     }
+//   },
+//   "dependencies": {
+//     "railsUsable": true,
+//     "dependencies": {},
+//     "boundMs": 900000
+//   },
+//   "dependency_status_bound_ms": 900000,
+//   "cache": {
+//     "enabled": false,
+//     "state": "disabled",
+//     "serving": false
+//   }
+// }
+
+// Expected response (degraded — HTTP 200 with X-Data-Stale: true when RPC is down)
+// {
+//   "ok": true,
+//   "status": "degraded",
+//   "network": "testnet",
+//   "stale": true,
+//   "as_of_ledger": 51234567,
+//   "lastIndexedLedger": 51234567,
+//   "last_indexed_ledger": 51234567,
+//   "latestLedger": null,
+//   "lagLedgers": null,
+//   "startedAt": "2025-01-01T00:00:00.000Z",
+//   "uptimeSeconds": 3600,
+//   "totalIndexed": 15000,
+//   "networks": {
+//     "testnet": {
+//       "lastIndexedLedger": 51234567,
+//       "latestLedger": null,
+//       "lagLedgers": null,
+//       "running": true
+//     }
+//   },
+//   "dependencies": {
+//     "railsUsable": true,
+//     "dependencies": {},
+//     "boundMs": 900000
+//   },
+//   "dependency_status_bound_ms": 900000,
+//   "cache": {
+//     "enabled": false,
+//     "state": "disabled",
+//     "serving": false
+//   }
 // }
 ```
 
@@ -262,15 +319,15 @@ console.log(data);
 
 ```bash
 # curl — all incoming transfers
-curl "http://localhost:3000/transfers/incoming/GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+curl "http://localhost:3000/transfers/incoming/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 
 # curl — filter by date window and page size
-curl "http://localhost:3000/transfers/incoming/GABCDEFGHIJKLMNOPQRSTUVWXYZ?fromDate=2025-01-01T00:00:00Z&limit=10"
+curl "http://localhost:3000/transfers/incoming/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF?fromDate=2025-01-01T00:00:00Z&limit=10"
 ```
 
 ```js
 // fetch
-const ADDRESS = "GABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ADDRESS = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const res = await fetch(
   `http://localhost:3000/transfers/incoming/${ADDRESS}?fromDate=2025-01-01T00:00:00Z&limit=10`
 );
@@ -282,7 +339,7 @@ console.log(data);
 // axios
 import axios from "axios";
 
-const ADDRESS = "GABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ADDRESS = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const { data } = await axios.get(
   `http://localhost:3000/transfers/incoming/${ADDRESS}`,
   {
@@ -296,23 +353,48 @@ console.log(data);
 
 // Expected response
 // {
-//   "hasMore": true,
-//   "nextCursor": "MTIzNDU=",
+//   "hasMore": false,
 //   "limit": 10,
 //   "offset": 0,
 //   "transfers": [
 //     {
-//       "id": 12345,
-//       "contractId": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B",
+//       "id": 4,
+//       "contractId": "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBD2KM",
 //       "eventType": "transfer",
-//       "fromAddress": "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
-//       "toAddress":   "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
-//       "amount":        "10000000000",
-//       "displayAmount": "1000.0000000",
-//       "ledger": 51234567,
-//       "ledgerClosedAt": "2025-01-01T12:00:00Z",
-//       "txHash": "0000000000000000000000000000000000000000000000000000000000000000",
-//       "eventId": "12345-1"
+//       "fromAddress": "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCWWHF",
+//       "toAddress":   "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+//       "amount":        "40000000",
+//       "displayAmount": "4.0000000",
+//       "ledger": 2004,
+//       "ledgerClosedAt": "2025-02-01T00:00:00.000Z",
+//       "txHash": "txhash-integration-multi",
+//       "eventId": "integration-004"
+//     },
+//     {
+//       "id": 2,
+//       "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+//       "eventType": "mint",
+//       "fromAddress": null,
+//       "toAddress":   "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+//       "amount":        "25000000",
+//       "displayAmount": "2.5000000",
+//       "ledger": 2002,
+//       "ledgerClosedAt": "2025-01-02T00:00:00.000Z",
+//       "txHash": "tx-mint-a-1",
+//       "eventId": "integration-002"
+//     },
+//     {
+//       "id": 1,
+//       "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+//       "eventType": "transfer",
+//       "fromAddress": "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWWHF",
+//       "toAddress":   "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+//       "amount":        "10000000",
+//       "displayAmount": "1.0000000",
+//       "ledger": 2001,
+//       "ledgerClosedAt": "2025-01-01T00:00:00.000Z",
+//       "txHash": "tx-incoming-a-1",
+//       "eventId": "integration-001"
 //     }
 //   ]
 // }
@@ -331,13 +413,13 @@ console.log(data);
 
 ```bash
 # curl
-curl "http://localhost:3000/transfers/address/GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+curl "http://localhost:3000/transfers/address/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 ```
 
 ```js
 // fetch — with optional token-contract filter
-const ADDRESS = "GABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const CONTRACT = "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B";
+const ADDRESS = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const CONTRACT = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM";
 const res = await fetch(
   `http://localhost:3000/transfers/address/${ADDRESS}?contractId=${CONTRACT}&limit=20`
 );
@@ -345,26 +427,54 @@ const data = await res.json();
 console.log(data);
 
 // OData-style filters and projections are also supported:
-// `http://localhost:3000/transfers/address/${ADDRESS}?$filter=ledger gt 1000 and contains(contractId,'CB64')&$select=contractId,amount&cursor=...`
+// `http://localhost:3000/transfers/address/${ADDRESS}?$filter=ledger gt 1000 and contains(contractId,'CAAA')&$select=contractId,amount&cursor=...`
 
 // Expected response  (same shape as /transfers/incoming — adds "direction" per row)
 // {
-//   "hasMore": true,
+//   "hasMore": false,
 //   "limit": 20,
 //   "offset": 0,
 //   "transfers": [
 //     {
-//       "id": 12345,
-//       "contractId": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B",
+//       "id": 3,
+//       "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
 //       "eventType": "transfer",
-//       "fromAddress": "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
-//       "toAddress":   "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
-//       "amount":        "10000000000",
-//       "displayAmount": "1000.0000000",
-//       "ledger": 51234567,
-//       "ledgerClosedAt": "2025-01-01T12:00:00Z",
-//       "txHash": "0000000000000000000000000000000000000000000000000000000000000000",
-//       "eventId": "12345-1",
+//       "fromAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+//       "toAddress":   "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWWHF",
+//       "amount":        "5000000",
+//       "displayAmount": "0.5000000",
+//       "ledger": 2003,
+//       "ledgerClosedAt": "2025-01-03T00:00:00.000Z",
+//       "txHash": "tx-outgoing-a-1",
+//       "eventId": "integration-003",
+//       "direction": "outgoing"
+//     },
+//     {
+//       "id": 2,
+//       "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+//       "eventType": "mint",
+//       "fromAddress": null,
+//       "toAddress":   "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+//       "amount":        "25000000",
+//       "displayAmount": "2.5000000",
+//       "ledger": 2002,
+//       "ledgerClosedAt": "2025-01-02T00:00:00.000Z",
+//       "txHash": "tx-mint-a-1",
+//       "eventId": "integration-002",
+//       "direction": "incoming"
+//     },
+//     {
+//       "id": 1,
+//       "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+//       "eventType": "transfer",
+//       "fromAddress": "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWWHF",
+//       "toAddress":   "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+//       "amount":        "10000000",
+//       "displayAmount": "1.0000000",
+//       "ledger": 2001,
+//       "ledgerClosedAt": "2025-01-01T00:00:00.000Z",
+//       "txHash": "tx-incoming-a-1",
+//       "eventId": "integration-001",
 //       "direction": "incoming"
 //     }
 //   ]
@@ -377,12 +487,12 @@ console.log(data);
 
 ```bash
 # curl
-curl "http://localhost:3000/summary/GABCDEFGHIJKLMNOPQRSTUVWXYZ"
+curl "http://localhost:3000/summary/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 ```
 
 ```js
 // fetch — narrow to a date window
-const ADDRESS = "GABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ADDRESS = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const res = await fetch(
   `http://localhost:3000/summary/${ADDRESS}?fromDate=2025-01-01T00:00:00Z&toDate=2025-01-31T23:59:59Z`
 );
@@ -391,24 +501,25 @@ console.log(data);
 
 // Expected response
 // {
-//   "address": "GABCDEFGHIJKLMNOPQRSTUVWXYZ",
+//   "address": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
 //   "window": {
-//     "fromDate": "2025-01-01T00:00:00Z",
-//     "toDate":   "2025-01-31T23:59:59Z"
+//     "fromDate": "2025-01-01T00:00:00.000Z",
+//     "toDate":   "2025-01-31T23:59:59.000Z"
 //   },
 //   "tokens": [
 //     {
-//       "contractId":          "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B",
-//       "totalReceived":       "50000000000",
-//       "totalSent":           "10000000000",
-//       "netFlow":             "40000000000",
-//       "displayTotalReceived": "5000.0000000",
-//       "displayTotalSent":     "1000.0000000",
-//       "displayNetFlow":       "4000.0000000",
-//       "txCount": 42
+//       "contractId":           "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+//       "totalReceived":        "35000000",
+//       "totalSent":            "5000000",
+//       "netFlow":              "30000000",
+//       "displayTotalReceived": "3.5000000",
+//       "displayTotalSent":     "0.5000000",
+//       "displayNetFlow":       "3.0000000",
+//       "txCount": 3
 //     }
 //   ]
 // }
+```
 ```
 
 ***
@@ -467,10 +578,10 @@ Every read route accepts a selector so a caller can say which one it wants:
 
 ```bash
 # query parameter
-curl "http://localhost:3000/transfers/incoming/GABC…?network=mainnet"
+curl "http://localhost:3000/transfers/incoming/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF?network=mainnet"
 
 # or a header — the query parameter wins if both are present
-curl -H "X-Network: mainnet" http://localhost:3000/transfers/incoming/GABC…
+curl -H "X-Network: mainnet" http://localhost:3000/transfers/incoming/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 ```
 
 Omit it and you get the deployment's configured network (`STELLAR_NETWORK`,
@@ -495,12 +606,12 @@ both chains in a single round-trip:
 
 ```graphql
 {
-  testnet: transfers(address: "GABC…", network: TESTNET, includeTotal: true) { total hasMore }
-  mainnet: transfers(address: "GABC…", network: MAINNET, includeTotal: true) { total hasMore }
+  testnet: transfers(address: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", network: TESTNET, includeTotal: true) { total hasMore }
+  mainnet: transfers(address: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", network: MAINNET, includeTotal: true) { total hasMore }
 }
 ```
 
-**WebSockets** take it on the upgrade URL — `ws://host/subscribe/GABC…?network=mainnet`
+**WebSockets** take it on the upgrade URL — `ws://host/subscribe/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF?network=mainnet`
 — and the stream is filtered to that network. A socket opened with an invalid or
 un-enabled selector is closed with code `1008` and the reason, rather than left
 open delivering nothing. GraphQL subscriptions work the same way on
@@ -510,7 +621,7 @@ open delivering nothing. GraphQL subscriptions work the same way on
 
 ### `GET /status`
 
-Indexer health — current ledger, network tip, lag, uptime.
+Indexer health — current ledger, network tip, lag, uptime, dependencies, and cache.
 
 ```bash
 curl http://localhost:3000/status
@@ -519,6 +630,7 @@ curl http://localhost:3000/status
 ```json
 {
   "ok": true,
+  "status": "healthy",
   "network": "testnet",
   "lastIndexedLedger": 5842100,
   "last_indexed_ledger": 5842100,
@@ -529,6 +641,17 @@ curl http://localhost:3000/status
   "totalIndexed": 12430,
   "networks": {
     "testnet": { "lastIndexedLedger": 5842100, "latestLedger": 5842102, "lagLedgers": 2, "running": true }
+  },
+  "dependencies": {
+    "railsUsable": true,
+    "dependencies": {},
+    "boundMs": 900000
+  },
+  "dependency_status_bound_ms": 900000,
+  "cache": {
+    "enabled": false,
+    "state": "disabled",
+    "serving": false
   }
 }
 ```
@@ -539,6 +662,9 @@ name the Prometheus gauge is exported under. Both always carry the same value.
 `network` names which chain the top-level fields describe — it follows the
 selector. `networks` reports every running loop regardless of the selector, so a
 single response shows one chain falling behind while the other is healthy.
+
+When RPC or rails are impaired, the route responds with HTTP 200 and `"status": "degraded"`,
+setting `stale: true`, `as_of_ledger`, and the `X-Data-Stale: true` response header.
 
 ***
 
@@ -628,10 +754,10 @@ All token transfers **received** by an address.
 
 ```bash
 # All incoming transfers for an address
-curl "http://localhost:3000/transfers/incoming/GABC123..."
+curl "http://localhost:3000/transfers/incoming/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 
 # Filter to a specific token, last 1000 ledgers
-curl "http://localhost:3000/transfers/incoming/GABC123...?contractId=CTOKEN...&fromLedger=5840000&limit=20"
+curl "http://localhost:3000/transfers/incoming/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF?contractId=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM&fromLedger=2000&limit=20"
 ```
 
 ***
@@ -641,7 +767,7 @@ curl "http://localhost:3000/transfers/incoming/GABC123...?contractId=CTOKEN...&f
 All token transfers **sent** by an address. Same query params as `/incoming`.
 
 ```bash
-curl "http://localhost:3000/transfers/outgoing/GABC123..."
+curl "http://localhost:3000/transfers/outgoing/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 ```
 
 ***
@@ -651,7 +777,7 @@ curl "http://localhost:3000/transfers/outgoing/GABC123..."
 All token events emitted within a transaction.
 
 ```bash
-curl "http://localhost:3000/transfers/tx/abcdef1234567890..."
+curl "http://localhost:3000/transfers/tx/txhash-integration-multi"
 ```
 
 ***
@@ -695,7 +821,7 @@ curl "http://localhost:3000/tokens?network=mainnet"
   "tokens": [
     {
       "network": "mainnet",
-      "contractId": "CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B",
+      "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
       "symbol": "USDC",
       "name": "USD Coin",
       "decimals": 7
@@ -717,7 +843,7 @@ exports with the ledger or date bounds.
 
 ```bash
 # Everything for one address on mainnet
-curl -OJ "http://localhost:3000/transfers.csv?address=GABC123...&network=mainnet"
+curl -OJ "http://localhost:3000/transfers.csv?address=GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF&network=mainnet"
 
 # A ledger window across all addresses, as Parquet
 curl -OJ "http://localhost:3000/transfers.parquet?fromLedger=5840000&toLedger=5850000"
@@ -822,13 +948,13 @@ Responses are transformed to the JSON:API document structure:
 
 ```bash
 # Request with JSON:API Accept header
-curl -H "Accept: application/vnd.api+json" http://localhost:3000/transfers/address/GABC123...
+curl -H "Accept: application/vnd.api+json" http://localhost:3000/transfers/address/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 # Response
 {
   "data": [
     {
-      "id": "evt-001",
+      "id": "integration-001",
       "type": "transfer",
       "attributes": {
         "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
@@ -836,9 +962,9 @@ curl -H "Accept: application/vnd.api+json" http://localhost:3000/transfers/addre
         "fromAddress": "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWWHF",
         "toAddress": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
         "amount": "10000000",
-        "ledger": 1001,
+        "ledger": 2001,
         "ledgerClosedAt": "2025-01-01T00:00:00.000Z",
-        "txHash": "aaaa1111",
+        "txHash": "tx-incoming-a-1",
         "displayAmount": "1.0000000"
       }
     }
@@ -854,7 +980,7 @@ curl -H "Accept: application/vnd.api+json" http://localhost:3000/transfers/addre
 ### Example: Summary in JSON:API Format
 
 ```bash
-curl -H "Accept: application/vnd.api+json" http://localhost:3000/summary/GABC123...
+curl -H "Accept: application/vnd.api+json" http://localhost:3000/summary/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 {
   "data": [
@@ -863,9 +989,9 @@ curl -H "Accept: application/vnd.api+json" http://localhost:3000/summary/GABC123
       "type": "token-summary",
       "attributes": {
         "contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        "totalReceived": "110000000",
-        "totalSent": "170000000",
-        "netFlow": "-60000000",
+        "totalReceived": "35000000",
+        "totalSent": "5000000",
+        "netFlow": "30000000",
         "txCount": 3
       }
     }
@@ -969,16 +1095,16 @@ Retrieve transfer histories (transfers, mints, burns, clawbacks) for any Stellar
 
 ```bash
 # Get all transfers for a specific account (pretty ASCII table by default)
-npx @veil/wraith-cli transfers --account GABCDEFGHIJKLMNOPQRSTUVWXYZ
+npx @veil/wraith-cli transfers --account GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 # Filter transfers to a specific token contract
-npx @veil/wraith-cli transfers --account GABCDEFGHIJKLMNOPQRSTUVWXYZ --contract CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B
+npx @veil/wraith-cli transfers --account GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --contract CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM
 
 # Retrieve only incoming transfers with custom pagination and limit
-npx @veil/wraith-cli transfers --account GABCDEFGHIJKLMNOPQRSTUVWXYZ --direction incoming --limit 10 --offset 0
+npx @veil/wraith-cli transfers --account GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --direction incoming --limit 10 --offset 0
 
 # Emit parseable JSON for scripts or piping
-npx @veil/wraith-cli transfers --account GABCDEFGHIJKLMNOPQRSTUVWXYZ --json
+npx @veil/wraith-cli transfers --account GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --json
 ```
 
 #### 2. Account summaries
@@ -986,13 +1112,13 @@ Get a grouped summary of token balances, incoming/outgoing flows, and transactio
 
 ```bash
 # View aggregate token statistics for an address
-npx @veil/wraith-cli summary GABCDEFGHIJKLMNOPQRSTUVWXYZ
+npx @veil/wraith-cli summary GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 # Narrow down the summary to a specific timeframe
-npx @veil/wraith-cli summary GABCDEFGHIJKLMNOPQRSTUVWXYZ --from-date 2025-01-01T00:00:00Z --to-date 2025-01-31T23:59:59Z
+npx @veil/wraith-cli summary GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --from-date 2025-01-01T00:00:00Z --to-date 2025-01-31T23:59:59Z
 
 # Get raw JSON output
-npx @veil/wraith-cli summary GABCDEFGHIJKLMNOPQRSTUVWXYZ --json
+npx @veil/wraith-cli summary GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --json
 ```
 
 #### 3. Live watch (Streaming)
@@ -1000,13 +1126,13 @@ Establish a real-time WebSocket connection to stream new transfers as soon as th
 
 ```bash
 # Stream all incoming/outgoing transfers for a specific address in real time
-npx @veil/wraith-cli watch GABCDEFGHIJKLMNOPQRSTUVWXYZ
+npx @veil/wraith-cli watch GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
 
 # Stream live events filtered by a specific token contract
-npx @veil/wraith-cli watch GABCDEFGHIJKLMNOPQRSTUVWXYZ --contract CB64D3G7SM2RTH6ISYIG4P2IYYD6J2OFR6B
+npx @veil/wraith-cli watch GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --contract CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM
 
 # Output live streams as a sequence of raw JSON lines (perfect for logging/scripting)
-npx @veil/wraith-cli watch GABCDEFGHIJKLMNOPQRSTUVWXYZ --json
+npx @veil/wraith-cli watch GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF --json
 ```
 
 #### 4. Webhook Management
