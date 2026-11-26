@@ -3,10 +3,9 @@
 Idiomatic Go client for the [Wraith](https://github.com/Miracle656/wraith)
 Soroban token-transfer indexer REST API.
 
-The client is split into **one package per resource** — `transfers`,
-`accounts`, `assets`, `nfts`, `webhooks`, `status` — all sharing a small
-transport in the root `wraith` package. Amounts are returned as `string` to
-preserve full i128 precision.
+The client is split into one package per resource, all sharing the transport in
+the `wraith` package. Amounts are returned as `string` to preserve full i128
+precision.
 
 ## Install
 
@@ -21,21 +20,31 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 
-	"github.com/Miracle656/wraith/clients/go/wraith"
-	"github.com/Miracle656/wraith/clients/go/transfers"
+	"github.com/Miracle656/wraith/clients/go/accounts"
 	"github.com/Miracle656/wraith/clients/go/assets"
+	"github.com/Miracle656/wraith/clients/go/hostfn"
+	"github.com/Miracle656/wraith/clients/go/nfts"
+	"github.com/Miracle656/wraith/clients/go/search"
+	"github.com/Miracle656/wraith/clients/go/tokens"
+	"github.com/Miracle656/wraith/clients/go/transfers"
+	"github.com/Miracle656/wraith/clients/go/wraith"
 )
 
 func main() {
+	const address = "GDWCO35QUYQLGO6P7OLW4BZWNMMGGUWNPLRVPLCBVG7YNVDZKUDIW4KN"
+	const contract = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+
 	c := wraith.New("https://wraith.example.com")
 	ctx := context.Background()
 
 	// Transfers received by an address.
 	tc := transfers.New(c)
-	page, err := tc.Incoming(ctx, "GABC...", &transfers.ListParams{
+	page, err := tc.Incoming(ctx, address, &transfers.ListParams{
 		Limit: wraith.IntPtr(100),
 	})
 	if err != nil {
@@ -54,30 +63,66 @@ func main() {
 	for _, a := range pop.Assets {
 		fmt.Println(a.ContractID, a.TransferCount, a.Volume)
 	}
+
+	// Search accepts a prefix or a full Stellar address or contract ID.
+	hits, err := search.New(c).Search(ctx, address, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(hits.Results)
+
+	metadata, err := tokens.New(c).List(ctx, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(metadata.Tokens)
+
+	logs, err := hostfn.New(c).Logs(ctx, contract, &hostfn.LogsParams{
+		Limit: wraith.IntPtr(10),
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(logs.Total)
+
+	balances, err := accounts.New(c).Balance(ctx, address)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(balances.Note, balances.Balances)
+
+	// Check the shared APIError to distinguish an unindexed NFT from other errors.
+	owner, err := nfts.New(c).Owner(ctx, contract, "42")
+	var apiErr *wraith.APIError
+	switch {
+	case errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound:
+		fmt.Println(apiErr.Message)
+	case err != nil:
+		log.Fatal(err)
+	default:
+		fmt.Println(owner.Owner)
+	}
 }
 ```
 
-A non-2xx response is returned as a `*wraith.APIError`:
-
-```go
-page, err := tc.Incoming(ctx, "GABC...", nil)
-var apiErr *wraith.APIError
-if errors.As(err, &apiErr) {
-	fmt.Println(apiErr.StatusCode, apiErr.Message)
-}
-```
+`Balance` sums indexed transfers per token. The `DerivedFromLedger` flag and `Note`
+describe this window, which starts at the indexer's first ledger. The resulting
+balance can differ from the on-chain balance.
 
 ## Packages
 
-| Package     | Constructor             | List methods                                  |
-| ----------- | ----------------------- | --------------------------------------------- |
-| `wraith`    | `wraith.New(baseURL)`   | shared transport, `APIError`, options         |
-| `transfers` | `transfers.New(c)`      | `Incoming`, `Outgoing`, `ForAddress`, `ByTx`  |
-| `accounts`  | `accounts.New(c)`       | `Summary`, `Transfers`                        |
-| `assets`    | `assets.New(c)`         | `PopularAssets`                               |
-| `nfts`      | `nfts.New(c)`           | `Transfers`                                   |
-| `webhooks`  | `webhooks.New(c)`       | `List`, `Deliveries`                          |
-| `status`    | `status.New(c)`         | `Get`                                         |
+| Package     | Constructor           | Methods                                      |
+| ----------- | --------------------- | -------------------------------------------- |
+| `wraith`    | `wraith.New(baseURL)` | Shared transport, `APIError`, options        |
+| `transfers` | `transfers.New(c)`    | `Incoming`, `Outgoing`, `ForAddress`, `ByTx` |
+| `accounts`  | `accounts.New(c)`     | `Summary`, `Transfers`, `Balance`             |
+| `assets`    | `assets.New(c)`       | `PopularAssets`                              |
+| `nfts`      | `nfts.New(c)`         | `Transfers`, `Owner`                          |
+| `webhooks`  | `webhooks.New(c)`     | `List`, `Deliveries`                          |
+| `status`    | `status.New(c)`       | `Get`                                         |
+| `search`    | `search.New(c)`       | `Search`                                      |
+| `tokens`    | `tokens.New(c)`       | `List`                                        |
+| `hostfn`    | `hostfn.New(c)`       | `Logs`                                        |
 
 Options: `wraith.WithHTTPClient(*http.Client)` and `wraith.WithHeader(k, v)`.
 

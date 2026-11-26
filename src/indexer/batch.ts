@@ -43,6 +43,14 @@ export type BatchContext = {
   network: Network;
   /** Contracts established as liquidity pools; grown as new pools are seen. */
   knownLpPools: Set<string>;
+  /**
+   * Whether newly stored records should be broadcast on the live emitters
+   * (`transferEmitter` for WebSocket, GraphQL subscriptions and webhooks;
+   * `hostFnLogEmitter` for GraphQL host-fn subscriptions). Defaults to `true`
+   * so live poll loops keep notifying subscribers, while historical backfills
+   * pass `false` unless live replay was explicitly requested.
+   */
+  notifyLive?: boolean;
 };
 
 export type BatchResult = {
@@ -67,6 +75,7 @@ export async function processEventBatch(
 ): Promise<BatchResult> {
   const net = ctx.network;
   const { knownLpPools } = ctx;
+  const notifyLive = ctx.notifyLive ?? true;
 
   // Split events by type. An NFT event is a 4-topic `transfer`, or a 2-topic
   // `mint`/`burn` whose data is a u32 token id — the last of which the
@@ -102,8 +111,8 @@ export async function processEventBatch(
     );
   }
 
-  // Broadcast each new record to WebSocket subscribers
-  if (inserted > 0) {
+  // Broadcast each new record to WebSocket subscribers and webhook workers
+  if (notifyLive && inserted > 0) {
     records.forEach((record) => emitTransfer(record, net));
   }
 
@@ -115,7 +124,9 @@ export async function processEventBatch(
     await upsertHostFnLogs(hostFnRecords, net).catch((err: unknown) =>
       console.error(`[indexer/${net}] host-fn log error:`, err),
     );
-    hostFnRecords.forEach((record) => emitHostFnLog(record, net));
+    if (notifyLive) {
+      hostFnRecords.forEach((record) => emitHostFnLog(record, net));
+    }
   }
 
   // ── LP-share path ──────────────────────────────────────────────────────────
