@@ -442,6 +442,11 @@ per-chain condition — and a <code>503 down</code> verdict still reports every 
 <td>Filter to a specific token contract (<code>C...</code>)</td>
 </tr>
 <tr>
+<td><code>token</code></td>
+<td>string</td>
+<td>Filter to a specific token contract (<code>C...</code>); the same filter as <code>contractId</code>, and it wins if both are sent</td>
+</tr>
+<tr>
 <td><code>fromLedger</code></td>
 <td>int</td>
 <td>Inclusive lower ledger bound</td>
@@ -452,17 +457,54 @@ per-chain condition — and a <code>503 down</code> verdict still reports every 
 <td>Inclusive upper ledger bound</td>
 </tr>
 <tr>
+<td><code>fromDate</code></td>
+<td>string</td>
+<td>ISO 8601 inclusive lower bound on <code>ledgerClosedAt</code></td>
+</tr>
+<tr>
+<td><code>toDate</code></td>
+<td>string</td>
+<td>ISO 8601 inclusive upper bound on <code>ledgerClosedAt</code></td>
+</tr>
+<tr>
+<td><code>eventType</code></td>
+<td>string</td>
+<td>Comma-separated event types: <code>transfer</code>, <code>mint</code>, <code>burn</code>, <code>clawback</code></td>
+</tr>
+<tr>
 <td><code>limit</code></td>
 <td>int</td>
-<td>Page size (max 200, default 50)</td>
+<td>Page size (1–200, default 50)</td>
 </tr>
 <tr>
 <td><code>offset</code></td>
 <td>int</td>
-<td>Pagination offset</td>
+<td>Pagination offset (default 0)</td>
+</tr>
+<tr>
+<td><code>cursor</code></td>
+<td>string</td>
+<td>Opaque pagination cursor; continue from <code>nextCursor</code></td>
+</tr>
+<tr>
+<td><code>includeTotal</code></td>
+<td>bool</td>
+<td>Also return an exact <code>total</code>. Runs a COUNT over every match, so it is markedly slower; omit it and use <code>hasMore</code> / <code>nextCursor</code></td>
+</tr>
+<tr>
+<td><code>$filter</code></td>
+<td>string</td>
+<td>OData filter expression</td>
+</tr>
+<tr>
+<td><code>$select</code></td>
+<td>string</td>
+<td>Comma-separated field list to return</td>
 </tr>
 </tbody>
 </table>
+<p>The same parameters apply to <code>GET /transfers/outgoing/:address</code> and the combined
+<code>GET /transfers/address/:address</code> route, which adds a per-row <code>direction</code>.</p>
 <pre><code class="bash"><span class="hl-6"># All incoming transfers for an address</span><br/><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/transfers/incoming/GABC123...&quot;</span><br/><br/><span class="hl-6"># Filter to a specific token, last 1000 ledgers</span><br/><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/transfers/incoming/GABC123...?contractId=CTOKEN...&amp;fromLedger=5840000&amp;limit=20&quot;</span>
 </code><button type="button">Copy</button></pre>
 
@@ -478,6 +520,510 @@ per-chain condition — and a <code>503 down</code> verdict still reports every 
 <pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/transfers/tx/abcdef1234567890...&quot;</span>
 </code><button type="button">Copy</button></pre>
 
+<hr>
+<h3 id="_-6" class="tsd-anchor-link"><code>GET /transfers/address/:address/export.csv</code><a href="#_-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Downloads every transfer matching the filters as a CSV attachment. The same
+filters as the JSON transfer routes apply, minus pagination and OData —
+<code>limit</code>, <code>offset</code>, <code>cursor</code>, <code>$filter</code> and <code>$select</code> have no meaning in a
+streamed download. The handler caps the export at 10,000 rows.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network</code></td>
+<td>string</td>
+<td><code>testnet</code> or <code>mainnet</code> (see above)</td>
+</tr>
+<tr>
+<td><code>contractId</code></td>
+<td>string</td>
+<td>Filter to a specific token contract (<code>C...</code>)</td>
+</tr>
+<tr>
+<td><code>token</code></td>
+<td>string</td>
+<td>Filter to a specific token contract (<code>C...</code>); same filter as <code>contractId</code> and wins if both are sent</td>
+</tr>
+<tr>
+<td><code>fromLedger</code></td>
+<td>int</td>
+<td>Inclusive lower ledger bound</td>
+</tr>
+<tr>
+<td><code>toLedger</code></td>
+<td>int</td>
+<td>Inclusive upper ledger bound</td>
+</tr>
+<tr>
+<td><code>fromDate</code></td>
+<td>string</td>
+<td>ISO 8601 inclusive lower bound on <code>ledgerClosedAt</code></td>
+</tr>
+<tr>
+<td><code>toDate</code></td>
+<td>string</td>
+<td>ISO 8601 inclusive upper bound on <code>ledgerClosedAt</code></td>
+</tr>
+<tr>
+<td><code>eventType</code></td>
+<td>string</td>
+<td>Comma-separated event types: <code>transfer</code>, <code>mint</code>, <code>burn</code>, <code>clawback</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-3">-OJ</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/transfers/address/&lt;G-address&gt;/export.csv?fromLedger=5840000&amp;eventType=transfer,mint&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Columns: <code>id</code>, <code>contractId</code>, <code>eventType</code>, <code>fromAddress</code>, <code>toAddress</code>, <code>amount</code>,
+<code>displayAmount</code>, <code>ledger</code>, <code>ledgerClosedAt</code>, <code>txHash</code>, <code>eventId</code>, <code>isSac</code>,
+<code>createdAt</code>.</p>
+<hr>
+<h3 id="·" class="tsd-anchor-link"><code>GET /summary/:address</code> · <code>GET /accounts/:address/summary</code><a href="#·" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Aggregate token totals for one address, grouped by token contract. Both routes
+take the same path and query parameters. <code>/summary/:address</code> answers from
+indexed transfers and returns a <code>tokens</code> list; <code>/accounts/:address/summary</code>
+reads the materialized account-summary table and returns an <code>assets</code> list with
+the same totals plus <code>net</code> and <code>lastActivityAt</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network</code></td>
+<td>string</td>
+<td><code>testnet</code> or <code>mainnet</code> (see above)</td>
+</tr>
+<tr>
+<td><code>contractId</code></td>
+<td>string</td>
+<td>Filter to a specific token contract (<code>C...</code>)</td>
+</tr>
+<tr>
+<td><code>fromDate</code></td>
+<td>string</td>
+<td>ISO 8601 inclusive lower bound on <code>ledgerClosedAt</code></td>
+</tr>
+<tr>
+<td><code>toDate</code></td>
+<td>string</td>
+<td>ISO 8601 inclusive upper bound on <code>ledgerClosedAt</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/accounts/&lt;G-address&gt;/summary?contractId=&lt;C-address&gt;&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;address&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;G-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;assets&quot;</span><span class="hl-1">: [</span><br/><span class="hl-1">    {</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;contractId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;C-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;totalSent&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;10000000000&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;totalReceived&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;50000000000&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;net&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;40000000000&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;displayTotalSent&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;1000.0000000&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;displayTotalReceived&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;5000.0000000&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;displayNet&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;4000.0000000&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;txCount&quot;</span><span class="hl-1">: </span><span class="hl-5">42</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;lastActivityAt&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;2025-01-01T12:00:00.000Z&quot;</span><br/><span class="hl-1">    }</span><br/><span class="hl-1">  ]</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h3 id="_-7" class="tsd-anchor-link"><code>GET /accounts/:address/balance</code><a href="#_-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Per-token balance for an address, <strong>derived by summing indexed transfers</strong>, not
+read from chain. The response says so in <code>derivedFromLedger</code> and <code>note</code>:
+history before the indexer's start ledger is missing, and an address that was
+net-negative over the indexed window can read negative.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network</code></td>
+<td>string</td>
+<td><code>testnet</code> or <code>mainnet</code> (see above)</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/accounts/&lt;G-address&gt;/balance?network=mainnet&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;address&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;G-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;network&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;mainnet&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;balances&quot;</span><span class="hl-1">: [</span><br/><span class="hl-1">    { </span><span class="hl-4">&quot;contractId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;C-address&gt;&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;balance&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;50000000000&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;displayBalance&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;5000.0000000&quot;</span><span class="hl-1"> }</span><br/><span class="hl-1">  ],</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;derivedFromLedger&quot;</span><span class="hl-1">: </span><span class="hl-3">true</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;note&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;Derived by summing indexed transfers, not read from chain. Excludes any history before the indexer&#39;s start ledger.&quot;</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Under JSON:API this route is transformed as a single <code>account-summary</code>
+resource with an empty <code>id</code>, because the transform keys on <code>/accounts/</code> and the
+balance body has no top-level <code>id</code> or <code>contractId</code>. That mismatch is tracked in
+issue #397; this documents what the code does today.</p>
+<hr>
+<h3 id="_-8" class="tsd-anchor-link"><code>GET /accounts/:address/transfers</code><a href="#_-8" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>All token transfers sent or received by an address. Accepts exactly the same
+query parameters as the transfer routes above, including the OData <code>$filter</code> /
+<code>$select</code> pair and cursor pagination. Returns the same page envelope —
+<code>{ hasMore, nextCursor?, limit, offset, total?, transfers }</code> — and each row
+carries a <code>direction</code> of <code>incoming</code> or <code>outgoing</code>.</p>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/accounts/&lt;G-address&gt;/transfers?token=&lt;C-address&gt;&amp;limit=20&amp;includeTotal=true&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h3 id="_-9" class="tsd-anchor-link"><code>GET /search</code><a href="#_-9" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Prefix search across indexed accounts, token assets and contracts. The query is
+trimmed and upper-cased, then matched against the same btree indexes the list
+routes use; at most 10 hits are returned, accounts first, then assets, then
+contracts, de-duplicated by value. Cached in Redis when the deployment has it.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network</code></td>
+<td>string</td>
+<td><code>testnet</code> or <code>mainnet</code> (see above)</td>
+</tr>
+<tr>
+<td><code>q</code></td>
+<td>string</td>
+<td>Required. 1–80 characters; trimmed before matching</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/search?q=&lt;G-address-prefix&gt;&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;query&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;G-address-prefix&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;count&quot;</span><span class="hl-1">: </span><span class="hl-5">1</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;results&quot;</span><span class="hl-1">: [</span><br/><span class="hl-1">    { </span><span class="hl-4">&quot;type&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;account&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;value&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;G-address&gt;&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;lastActivityAt&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;2025-01-01T00:00:00.000Z&quot;</span><span class="hl-1"> }</span><br/><span class="hl-1">  ]</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h3 id="_-10" class="tsd-anchor-link"><code>GET /assets/popular</code><a href="#_-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Tokens ranked by transfer count or volume over a rolling window.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network</code></td>
+<td>string</td>
+<td><code>testnet</code> or <code>mainnet</code> (see above)</td>
+</tr>
+<tr>
+<td><code>window</code></td>
+<td>string</td>
+<td><code>1h</code>, <code>24h</code> or <code>7d</code> (default <code>24h</code>)</td>
+</tr>
+<tr>
+<td><code>by</code></td>
+<td>string</td>
+<td><code>transfers</code> or <code>volume</code> (default <code>transfers</code>)</td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>int</td>
+<td>Page size, 1–100 (default 20)</td>
+</tr>
+<tr>
+<td><code>offset</code></td>
+<td>int</td>
+<td>Pagination offset (default 0)</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/assets/popular?window=7d&amp;by=volume&amp;limit=10&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;window&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;7d&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;by&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;volume&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;limit&quot;</span><span class="hl-1">: </span><span class="hl-5">10</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;offset&quot;</span><span class="hl-1">: </span><span class="hl-5">0</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;total&quot;</span><span class="hl-1">: </span><span class="hl-5">1</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;assets&quot;</span><span class="hl-1">: [</span><br/><span class="hl-1">    { </span><span class="hl-4">&quot;contractId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;C-address&gt;&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;transferCount&quot;</span><span class="hl-1">: </span><span class="hl-5">42</span><span class="hl-1">, </span><span class="hl-4">&quot;volume&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;10000000000&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;displayVolume&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;1000.0000000&quot;</span><span class="hl-1"> }</span><br/><span class="hl-1">  ]</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h3 id="_-11" class="tsd-anchor-link"><code>GET /nfts/transfers</code><a href="#_-11" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>CAP-46 NFT transfer events. <code>includeTotal</code> behaves as it does on the fungible
+transfer routes: it is off by default and costs a full COUNT when asked for.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network</code></td>
+<td>string</td>
+<td><code>testnet</code> or <code>mainnet</code> (see above)</td>
+</tr>
+<tr>
+<td><code>contract</code></td>
+<td>string</td>
+<td>Filter to a specific NFT contract (<code>C...</code>)</td>
+</tr>
+<tr>
+<td><code>token_id</code></td>
+<td>string</td>
+<td>Filter to a specific token identifier</td>
+</tr>
+<tr>
+<td><code>address</code></td>
+<td>string</td>
+<td>Filter to transfers where the sender or recipient is this address</td>
+</tr>
+<tr>
+<td><code>fromLedger</code></td>
+<td>int</td>
+<td>Inclusive lower ledger bound</td>
+</tr>
+<tr>
+<td><code>toLedger</code></td>
+<td>int</td>
+<td>Inclusive upper ledger bound</td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>int</td>
+<td>Page size, 1–200 (default 50)</td>
+</tr>
+<tr>
+<td><code>offset</code></td>
+<td>int</td>
+<td>Pagination offset (default 0)</td>
+</tr>
+<tr>
+<td><code>cursor</code></td>
+<td>string</td>
+<td>Opaque pagination cursor; continue from <code>nextCursor</code></td>
+</tr>
+<tr>
+<td><code>includeTotal</code></td>
+<td>bool</td>
+<td>Also return an exact <code>total</code> (runs a COUNT)</td>
+</tr>
+<tr>
+<td><code>$filter</code></td>
+<td>string</td>
+<td>OData filter expression</td>
+</tr>
+<tr>
+<td><code>$select</code></td>
+<td>string</td>
+<td>Comma-separated field list to return</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/nfts/transfers?contract=&lt;C-address&gt;&amp;limit=10&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;hasMore&quot;</span><span class="hl-1">: </span><span class="hl-3">false</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;limit&quot;</span><span class="hl-1">: </span><span class="hl-5">10</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;offset&quot;</span><span class="hl-1">: </span><span class="hl-5">0</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;transfers&quot;</span><span class="hl-1">: [</span><br/><span class="hl-1">    {</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;id&quot;</span><span class="hl-1">: </span><span class="hl-5">1</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;contractId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;C-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;tokenId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;token-id&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;fromAddress&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;G-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;toAddress&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;G-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;ledger&quot;</span><span class="hl-1">: </span><span class="hl-5">5842100</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;ledgerClosedAt&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;2025-01-01T00:00:00.000Z&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;txHash&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;tx-hash&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;eventId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;5842100-1&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;createdAt&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;2025-01-01T00:00:01.000Z&quot;</span><br/><span class="hl-1">    }</span><br/><span class="hl-1">  ]</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h3 id="_-12" class="tsd-anchor-link"><code>GET /nfts/owners/:contract/:token_id</code><a href="#_-12" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The current owner of an NFT — the <code>toAddress</code> of its most recent indexed
+transfer — plus any cached metadata for the token. Answers <code>404</code> when no
+transfer for that contract and token has been indexed, so an ownerless token is
+not mistaken for one whose owner is the zero address.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>contract</code></td>
+<td>path</td>
+<td>NFT contract address (<code>C...</code>)</td>
+</tr>
+<tr>
+<td><code>token_id</code></td>
+<td>path</td>
+<td>Token identifier</td>
+</tr>
+<tr>
+<td><code>network</code></td>
+<td>string</td>
+<td><code>testnet</code> or <code>mainnet</code> (see above)</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/nfts/owners/&lt;C-address&gt;/&lt;token-id&gt;&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;contract&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;C-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;token_id&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;token-id&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;owner&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;G-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;metadata&quot;</span><span class="hl-1">: { </span><span class="hl-4">&quot;name&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;Example NFT&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;tokenUri&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;https://example.com/metadata/1.json&quot;</span><span class="hl-1"> }</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h3 id="_-13" class="tsd-anchor-link"><code>GET /host-fn/:contractId</code><a href="#_-13" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Raw host-function invocation logs for a contract. Every contract event the
+indexer sees is stored here, not only SEP-41 token events, so an arbitrary
+contract's calls can be read without a custom decoder.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>contractId</code></td>
+<td>path</td>
+<td>Contract address (<code>C...</code>)</td>
+</tr>
+<tr>
+<td><code>network</code></td>
+<td>string</td>
+<td><code>testnet</code> or <code>mainnet</code> (see above)</td>
+</tr>
+<tr>
+<td><code>functionName</code></td>
+<td>string</td>
+<td>Filter by function name, e.g. <code>swap</code></td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>int</td>
+<td>Page size, 1–200 (default 50)</td>
+</tr>
+<tr>
+<td><code>offset</code></td>
+<td>int</td>
+<td>Pagination offset (default 0)</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/host-fn/&lt;C-address&gt;?functionName=swap&amp;limit=20&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;contractId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;C-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;total&quot;</span><span class="hl-1">: </span><span class="hl-5">1</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;limit&quot;</span><span class="hl-1">: </span><span class="hl-5">20</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;offset&quot;</span><span class="hl-1">: </span><span class="hl-5">0</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;logs&quot;</span><span class="hl-1">: [</span><br/><span class="hl-1">    {</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;contractId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;C-address&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;functionName&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;swap&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;args&quot;</span><span class="hl-1">: { </span><span class="hl-4">&quot;amount_in&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;1000000000&quot;</span><span class="hl-1"> },</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;result&quot;</span><span class="hl-1">: { </span><span class="hl-4">&quot;amount_out&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;990000000&quot;</span><span class="hl-1"> },</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;gasUsed&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;120000&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;ledger&quot;</span><span class="hl-1">: </span><span class="hl-5">5842100</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;ledgerClosedAt&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;2025-01-01T00:00:00.000Z&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;txHash&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;&lt;tx-hash&gt;&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;eventId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;5842100-1&quot;</span><br/><span class="hl-1">    }</span><br/><span class="hl-1">  ]</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h3 id="webhook-subscriptions" class="tsd-anchor-link">Webhook subscriptions<a href="#webhook-subscriptions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>POST /webhooks</code> creates a subscription. <code>secret</code> is used to sign deliveries
+with HMAC-SHA256; the response explains the <code>X-Wraith-Signature</code> format, and
+<code>GET</code> never returns the secret. <code>GET /webhooks</code> lists every subscription.
+<code>DELETE /webhooks/:id</code> removes one and cascades its delivery history.
+<code>GET /webhooks/:id/deliveries</code> reads the delivery log.</p>
+<p><strong><code>POST /webhooks</code> body</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>url</code></td>
+<td>string</td>
+<td>Receiver URL; must start with <code>http://</code> or <code>https://</code></td>
+</tr>
+<tr>
+<td><code>secret</code></td>
+<td>string</td>
+<td>Shared secret for the HMAC-SHA256 signature</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td>object</td>
+<td>Optional: <code>contract</code>, <code>from</code>, <code>to</code>, <code>min_amount</code></td>
+</tr>
+<tr>
+<td><code>active</code></td>
+<td>bool</td>
+<td>Optional; defaults to <code>true</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>GET /webhooks/:id/deliveries</code> query</strong></p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>status</code></td>
+<td>string</td>
+<td><code>pending</code>, <code>success</code> or <code>failed</code></td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>int</td>
+<td>Page size, 1–200 (default 50)</td>
+</tr>
+<tr>
+<td><code>offset</code></td>
+<td>int</td>
+<td>Pagination offset (default 0)</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-6"># create</span><br/><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-3">-X</span><span class="hl-1"> </span><span class="hl-2">POST</span><span class="hl-1"> </span><span class="hl-2">http://localhost:3000/webhooks</span><span class="hl-1"> </span><span class="hl-10">\</span><br/><span class="hl-1">  </span><span class="hl-3">-H</span><span class="hl-1"> </span><span class="hl-2">&quot;Content-Type: application/json&quot;</span><span class="hl-1"> </span><span class="hl-10">\</span><br/><span class="hl-1">  </span><span class="hl-3">-d</span><span class="hl-1"> </span><span class="hl-2">&#39;{&quot;url&quot;:&quot;https://example.com/hook&quot;,&quot;secret&quot;:&quot;&lt;webhook-secret&gt;&quot;,&quot;filter&quot;:{&quot;contract&quot;:&quot;&lt;C-address&gt;&quot;}}&#39;</span><br/><br/><span class="hl-6"># list, delete, and read the delivery log</span><br/><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">http://localhost:3000/webhooks</span><br/><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-3">-X</span><span class="hl-1"> </span><span class="hl-2">DELETE</span><span class="hl-1"> </span><span class="hl-2">http://localhost:3000/webhooks/</span><span class="hl-1">&lt;</span><span class="hl-2">webhook-i</span><span class="hl-1">d&gt;</span><br/><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/webhooks/&lt;webhook-id&gt;/deliveries?status=failed&amp;limit=20&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;total&quot;</span><span class="hl-1">: </span><span class="hl-5">1</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;limit&quot;</span><span class="hl-1">: </span><span class="hl-5">20</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;offset&quot;</span><span class="hl-1">: </span><span class="hl-5">0</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;deliveries&quot;</span><span class="hl-1">: [</span><br/><span class="hl-1">    {</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;id&quot;</span><span class="hl-1">: </span><span class="hl-5">1</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;eventId&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;5842100-1&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;status&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;failed&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;attempts&quot;</span><span class="hl-1">: </span><span class="hl-5">3</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;lastStatusCode&quot;</span><span class="hl-1">: </span><span class="hl-5">500</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;lastError&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;receiver returned 500&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;nextRetryAt&quot;</span><span class="hl-1">: </span><span class="hl-3">null</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;deliveredAt&quot;</span><span class="hl-1">: </span><span class="hl-3">null</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;createdAt&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;2025-01-01T00:00:00.000Z&quot;</span><br/><span class="hl-1">    }</span><br/><span class="hl-1">  ]</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h3 id="naira-rail-lookups" class="tsd-anchor-link">Naira rail lookups<a href="#naira-rail-lookups" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Both routes require the deployment's provider key and are mainnet only. They
+read; neither creates an order.</p>
+<p><code>GET /ngn/customers/status</code> answers whether a customer reference is verified.
+It takes <code>customerRef</code> (required) and is rate-limited, because an unthrottled
+answer would be an oracle for whether a reference exists. The response carries
+<code>customerRef</code>, <code>verified</code>, and <code>status</code> when the provider supplies one.</p>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/ngn/customers/status?customerRef=&lt;customer-ref&gt;&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>GET /ngn/bills/data-bundles</code> returns the read-only data-bundle catalogue,
+optionally filtered by <code>provider</code>. It is cached for five minutes.</p>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>provider</code></td>
+<td>string</td>
+<td>Optional; e.g. <code>MTN</code>, <code>AIRTEL</code>, <code>GLO</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/ngn/bills/data-bundles?provider=MTN&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;bundles&quot;</span><span class="hl-1">: [</span><br/><span class="hl-1">    { </span><span class="hl-4">&quot;provider&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;MTN&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;code&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;mtn-1gb-30d&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;label&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;1 GB / 30 days&quot;</span><span class="hl-1">, </span><span class="hl-4">&quot;megabytes&quot;</span><span class="hl-1">: </span><span class="hl-5">1024</span><span class="hl-1">, </span><span class="hl-4">&quot;validityDays&quot;</span><span class="hl-1">: </span><span class="hl-5">30</span><span class="hl-1">, </span><span class="hl-4">&quot;amountNgn&quot;</span><span class="hl-1">: </span><span class="hl-5">500</span><span class="hl-1"> }</span><br/><span class="hl-1">  ]</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<blockquote>
+<p>The fee routes (<code>GET /fees</code>) are deliberately not described in this section;
+issue #417 covers their documentation.</p>
+</blockquote>
 <hr>
 <h3 id="changing-the-openapi-spec" class="tsd-anchor-link">Changing the OpenAPI spec<a href="#changing-the-openapi-spec" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p><code>openapi.json</code> is generated — edit <code>src/openapi/build.ts</code> and <code>schemas.ts</code>, then:</p>
@@ -495,7 +1041,7 @@ missed.</p>
 tells generators and readers the endpoint is being withdrawn, and the client
 would emit <code>@deprecated</code> on endpoints the wallet calls today.</p>
 <hr>
-<h3 id="_-6" class="tsd-anchor-link"><code>GET /tokens</code><a href="#_-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<h3 id="_-14" class="tsd-anchor-link"><code>GET /tokens</code><a href="#_-14" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>All tokens the indexer has encountered and cached, on the selected network.
 Accepts the same <code>?network=</code> / <code>X-Network</code> selector as every read route.</p>
 <pre><code class="bash"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">&quot;http://localhost:3000/tokens?network=mainnet&quot;</span>
@@ -505,7 +1051,7 @@ Accepts the same <code>?network=</code> / <code>X-Network</code> selector as eve
 </code><button type="button">Copy</button></pre>
 
 <hr>
-<h3 id="·" class="tsd-anchor-link"><code>GET /transfers.csv</code> · <code>GET /transfers.parquet</code><a href="#·" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<h3 id="·-1" class="tsd-anchor-link"><code>GET /transfers.csv</code> · <code>GET /transfers.parquet</code><a href="#·-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>Export the matching transfer set as a CSV or Apache Parquet download — no
 pagination, but <strong>capped</strong>: see the row-cap note above for <code>maxRows</code>,
 <code>X-Truncated</code> and <code>X-Row-Limit</code>. Accepts the same filters as the JSON transfer
@@ -516,7 +1062,7 @@ exports with the ledger or date bounds.</p>
 </code><button type="button">Copy</button></pre>
 
 <hr>
-<h3 id="_-7" class="tsd-anchor-link"><code>GET /candles/:bucket/:contractId</code><a href="#_-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<h3 id="_-15" class="tsd-anchor-link"><code>GET /candles/:bucket/:contractId</code><a href="#_-15" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>Returns OHLC candles from the existing <code>ohlc</code> aggregate tables. <code>bucket</code> is
 <code>1m</code>, <code>1h</code>, or <code>1d</code>; <code>contractId</code> is a 56-character Stellar contract address.
 Pagination uses <code>limit</code> (1–1000, default 100) and <code>offset</code> (non-negative, default 0).
@@ -785,7 +1331,7 @@ single-network deployment, generate it with <code>OHLC_REFRESH_INTERVAL_MS=60000
 </tr>
 <tr>
 <td><code>GET /accounts/:address/balance</code></td>
-<td><code>account-balance</code></td>
+<td><code>account-summary</code></td>
 </tr>
 <tr>
 <td><code>GET /accounts/:address/transfers</code></td>
@@ -817,9 +1363,17 @@ single-network deployment, generate it with <code>OHLC_REFRESH_INTERVAL_MS=60000
 </tr>
 </tbody>
 </table>
+<p><code>GET /accounts/:address/balance</code> is transformed as a single <code>account-summary</code>
+resource, even though its body is a balance list rather than a summary. That is
+what <code>determineResourceType</code> in <code>src/middleware/jsonapi.ts</code> does today: it
+matches any path containing <code>/accounts/</code> as <code>account-summary</code>, and the balance
+body has no top-level <code>id</code> or <code>contractId</code>, so the JSON:API resource <code>id</code> is an
+empty string. Open issue #397 tracks the mismatch; this section documents the
+current behaviour rather than changing it.</p>
 <p><code>GET /metrics</code> is not a JSON:API resource — it serves Prometheus text format.</p>
-<p>The routes below are live but outside the JSON:API surface — no resource
-type, no <code>data</code> envelope:</p>
+<p>The routes below are live but have no dedicated JSON:API resource type (the
+transform falls back to <code>generic</code> for bodies that are JSON, and the download
+routes do not go through it at all):</p>
 <table>
 <thead>
 <tr>
@@ -840,14 +1394,12 @@ type, no <code>data</code> envelope:</p>
 <td><code>GET /transfers.parquet</code></td>
 <td>Full-set Parquet export (no pagination)</td>
 </tr>
-<tr>
-<td><code>GET /accounts/:address/balance</code></td>
-<td>Derived balances, not on-chain reads</td>
-</tr>
 </tbody>
 </table>
-<p>Internal routes — not part of the public data API, and marked <code>deprecated: true</code>
-with a rationale in <code>openapi.json</code>:</p>
+<p>Internal routes — not part of the public data API, and marked <code>x-internal: true</code>
+with a rationale in <code>openapi.json</code>. They are deliberately <strong>not</strong> <code>deprecated</code>:
+that flag tells generators and readers the endpoint is being withdrawn, and
+these routes are live and called by the wallet today.</p>
 <table>
 <thead>
 <tr>
@@ -859,6 +1411,10 @@ with a rationale in <code>openapi.json</code>:</p>
 <tr>
 <td><code>POST /webhooks/linq</code></td>
 <td>Signature-verified payout provider callback</td>
+</tr>
+<tr>
+<td><code>GET /offramp/availability</code></td>
+<td>Wallet-only cash-out availability gate (no provider call)</td>
 </tr>
 <tr>
 <td><code>GET /offramp/rate</code></td>
@@ -970,4 +1526,4 @@ with a rationale in <code>openapi.json</code>:</p>
 <li><a href="https://developers.stellar.org/docs/data/indexers/build-your-own/processors/token-transfer-processor">Token Transfer Processor</a></li>
 <li><a href="https://developers.stellar.org/docs/data/indexers">Galexie — Ledger Data Lake</a></li>
 </ul>
-</div></div><div class="col-sidebar"><div class="page-menu"><div class="tsd-navigation settings"><details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>Settings</h3></summary><div class="tsd-accordion-details"><div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span><ul id="tsd-filter-options"><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li></ul></div><div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div><details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>On This Page</h3></summary><div class="tsd-accordion-details"><a href="#wraith-👻"><span>Wraith 👻</span></a><ul><li><a href="#how-it-works"><span>How <wbr/>It <wbr/>Works</span></a></li><li><a href="#quick-start"><span>Quick <wbr/>Start</span></a></li><li><ul><li><a href="#1-clone-install"><span>1. <wbr/>Clone &amp; install</span></a></li><li><a href="#2-configure"><span>2. <wbr/>Configure</span></a></li><li><a href="#3-start-postgres"><span>3. <wbr/>Start <wbr/>Postgres</span></a></li><li><a href="#4-create-the-schema"><span>4. <wbr/>Create the schema</span></a></li><li><a href="#5-seed-the-database-optional"><span>5. <wbr/>Seed the database (optional)</span></a></li><li><a href="#6-start-wraith"><span>6. <wbr/>Start <wbr/>Wraith</span></a></li></ul></li><li><a href="#api-documentation"><span>API <wbr/>Documentation</span></a></li><li><ul><li><a href="#rest-api-specification"><span>REST <wbr/>API <wbr/>Specification</span></a></li><li><a href="#typescript-nodejs-library-reference"><span>Type<wbr/>Script / <wbr/>Node.js <wbr/>Library <wbr/>Reference</span></a></li></ul></li><li><a href="#usage-examples"><span>Usage <wbr/>Examples</span></a></li><li><ul><li><a href="#-health-check"><span> — <wbr/>Health check</span></a></li><li><a href="#-incoming-transfers"><span> — <wbr/>Incoming transfers</span></a></li><li><a href="#-all-transfers-sent-received-merged"><span> — <wbr/>All transfers (sent &amp; received, merged)</span></a></li><li><a href="#-token-summary"><span> — <wbr/>Token summary</span></a></li></ul></li><li><a href="#api-reference"><span>API <wbr/>Reference</span></a></li><li><ul><li><a href="#cors"><span>CORS</span></a></li><li><a href="#selecting-a-network"><span>Selecting a network</span></a></li><li><a href="#_"><span></span></a></li><li><a href="#_-1"><span></span></a></li><li><a href="#_-2"><span></span></a></li><li><a href="#_-3"><span></span></a></li><li><a href="#_-4"><span></span></a></li><li><a href="#_-5"><span></span></a></li><li><a href="#changing-the-openapi-spec"><span>Changing the <wbr/>Open<wbr/>API spec</span></a></li><li><a href="#_-6"><span></span></a></li><li><a href="#·"><span> · </span></a></li><li><a href="#_-7"><span></span></a></li></ul></li><li><a href="#environment-variables"><span>Environment <wbr/>Variables</span></a></li><li><ul><li><a href="#rpc-url-resolution"><span>RPC <wbr/>URL <wbr/>Resolution</span></a></li><li><a href="#indexer-source-fallback"><span>Indexer <wbr/>Source <wbr/>Fallback</span></a></li><li><a href="#mainnet-rpc-providers"><span>Mainnet <wbr/>RPC <wbr/>Providers</span></a></li><li><a href="#database-read-replicas"><span>Database <wbr/>Read <wbr/>Replicas</span></a></li><li><ul><li><a href="#what-replicas-are-used-for"><span>What <wbr/>Replicas <wbr/>Are <wbr/>Used <wbr/>For</span></a></li><li><a href="#what-replicas-are-never-used-for"><span>What <wbr/>Replicas <wbr/>Are <wbr/>NEVER <wbr/>Used <wbr/>For</span></a></li><li><a href="#forcing-the-primary-for-a-read"><span>Forcing the <wbr/>Primary for a <wbr/>Read</span></a></li><li><a href="#health-checks-and-failover"><span>Health <wbr/>Checks and <wbr/>Failover</span></a></li><li><a href="#metrics"><span>Metrics</span></a></li></ul></li></ul></li><li><a href="#jsonapi-content-negotiation"><span>JSON:<wbr/>API <wbr/>Content <wbr/>Negotiation</span></a></li><li><ul><li><a href="#jsonapi-response-structure"><span>JSON:<wbr/>API <wbr/>Response <wbr/>Structure</span></a></li><li><a href="#example-transfers-in-jsonapi-format"><span>Example: <wbr/>Transfers in <wbr/>JSON:<wbr/>API <wbr/>Format</span></a></li><li><a href="#example-summary-in-jsonapi-format"><span>Example: <wbr/>Summary in <wbr/>JSON:<wbr/>API <wbr/>Format</span></a></li><li><a href="#supported-endpoints"><span>Supported <wbr/>Endpoints</span></a></li></ul></li><li><a href="#event-types-indexed"><span>Event <wbr/>Types <wbr/>Indexed</span></a></li><li><a href="#why-horizon-doesnt-cover-this"><span>Why <wbr/>Horizon <wbr/>Doesn&#39;t <wbr/>Cover <wbr/>This</span></a></li><li><a href="#command-line-interface-cli"><span>Command-<wbr/>Line <wbr/>Interface (<wbr/>CLI)</span></a></li><li><ul><li><a href="#configuration"><span>Configuration</span></a></li><li><a href="#commands-examples"><span>Commands &amp; <wbr/>Examples</span></a></li><li><ul><li><a href="#1-query-transfers"><span>1. <wbr/>Query transfers</span></a></li><li><a href="#2-account-summaries"><span>2. <wbr/>Account summaries</span></a></li><li><a href="#3-live-watch-streaming"><span>3. <wbr/>Live watch (<wbr/>Streaming)</span></a></li><li><a href="#4-webhook-management"><span>4. <wbr/>Webhook <wbr/>Management</span></a></li></ul></li></ul></li><li><a href="#references"><span>References</span></a></li></ul></div></details></div><div class="site-menu"><nav id="tsd-sidebar-links" class="tsd-navigation"><a href="https://github.com/Miracle656/wraith" class="tsd-nav-link">GitHub</a></nav><nav class="tsd-navigation"><a href="modules.html">Wraith — API Reference - v1.0.0</a><ul class="tsd-small-nested-navigation" id="tsd-nav-container"><li>Loading...</li></ul></nav></div></div></div><footer><p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer><div class="overlay"></div></body></html>
+</div></div><div class="col-sidebar"><div class="page-menu"><div class="tsd-navigation settings"><details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>Settings</h3></summary><div class="tsd-accordion-details"><div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span><ul id="tsd-filter-options"><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li></ul></div><div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div><details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>On This Page</h3></summary><div class="tsd-accordion-details"><a href="#wraith-👻"><span>Wraith 👻</span></a><ul><li><a href="#how-it-works"><span>How <wbr/>It <wbr/>Works</span></a></li><li><a href="#quick-start"><span>Quick <wbr/>Start</span></a></li><li><ul><li><a href="#1-clone-install"><span>1. <wbr/>Clone &amp; install</span></a></li><li><a href="#2-configure"><span>2. <wbr/>Configure</span></a></li><li><a href="#3-start-postgres"><span>3. <wbr/>Start <wbr/>Postgres</span></a></li><li><a href="#4-create-the-schema"><span>4. <wbr/>Create the schema</span></a></li><li><a href="#5-seed-the-database-optional"><span>5. <wbr/>Seed the database (optional)</span></a></li><li><a href="#6-start-wraith"><span>6. <wbr/>Start <wbr/>Wraith</span></a></li></ul></li><li><a href="#api-documentation"><span>API <wbr/>Documentation</span></a></li><li><ul><li><a href="#rest-api-specification"><span>REST <wbr/>API <wbr/>Specification</span></a></li><li><a href="#typescript-nodejs-library-reference"><span>Type<wbr/>Script / <wbr/>Node.js <wbr/>Library <wbr/>Reference</span></a></li></ul></li><li><a href="#usage-examples"><span>Usage <wbr/>Examples</span></a></li><li><ul><li><a href="#-health-check"><span> — <wbr/>Health check</span></a></li><li><a href="#-incoming-transfers"><span> — <wbr/>Incoming transfers</span></a></li><li><a href="#-all-transfers-sent-received-merged"><span> — <wbr/>All transfers (sent &amp; received, merged)</span></a></li><li><a href="#-token-summary"><span> — <wbr/>Token summary</span></a></li></ul></li><li><a href="#api-reference"><span>API <wbr/>Reference</span></a></li><li><ul><li><a href="#cors"><span>CORS</span></a></li><li><a href="#selecting-a-network"><span>Selecting a network</span></a></li><li><a href="#_"><span></span></a></li><li><a href="#_-1"><span></span></a></li><li><a href="#_-2"><span></span></a></li><li><a href="#_-3"><span></span></a></li><li><a href="#_-4"><span></span></a></li><li><a href="#_-5"><span></span></a></li><li><a href="#_-6"><span></span></a></li><li><a href="#·"><span> · </span></a></li><li><a href="#_-7"><span></span></a></li><li><a href="#_-8"><span></span></a></li><li><a href="#_-9"><span></span></a></li><li><a href="#_-10"><span></span></a></li><li><a href="#_-11"><span></span></a></li><li><a href="#_-12"><span></span></a></li><li><a href="#_-13"><span></span></a></li><li><a href="#webhook-subscriptions"><span>Webhook subscriptions</span></a></li><li><a href="#naira-rail-lookups"><span>Naira rail lookups</span></a></li><li><a href="#changing-the-openapi-spec"><span>Changing the <wbr/>Open<wbr/>API spec</span></a></li><li><a href="#_-14"><span></span></a></li><li><a href="#·-1"><span> · </span></a></li><li><a href="#_-15"><span></span></a></li></ul></li><li><a href="#environment-variables"><span>Environment <wbr/>Variables</span></a></li><li><ul><li><a href="#rpc-url-resolution"><span>RPC <wbr/>URL <wbr/>Resolution</span></a></li><li><a href="#indexer-source-fallback"><span>Indexer <wbr/>Source <wbr/>Fallback</span></a></li><li><a href="#mainnet-rpc-providers"><span>Mainnet <wbr/>RPC <wbr/>Providers</span></a></li><li><a href="#database-read-replicas"><span>Database <wbr/>Read <wbr/>Replicas</span></a></li><li><ul><li><a href="#what-replicas-are-used-for"><span>What <wbr/>Replicas <wbr/>Are <wbr/>Used <wbr/>For</span></a></li><li><a href="#what-replicas-are-never-used-for"><span>What <wbr/>Replicas <wbr/>Are <wbr/>NEVER <wbr/>Used <wbr/>For</span></a></li><li><a href="#forcing-the-primary-for-a-read"><span>Forcing the <wbr/>Primary for a <wbr/>Read</span></a></li><li><a href="#health-checks-and-failover"><span>Health <wbr/>Checks and <wbr/>Failover</span></a></li><li><a href="#metrics"><span>Metrics</span></a></li></ul></li></ul></li><li><a href="#jsonapi-content-negotiation"><span>JSON:<wbr/>API <wbr/>Content <wbr/>Negotiation</span></a></li><li><ul><li><a href="#jsonapi-response-structure"><span>JSON:<wbr/>API <wbr/>Response <wbr/>Structure</span></a></li><li><a href="#example-transfers-in-jsonapi-format"><span>Example: <wbr/>Transfers in <wbr/>JSON:<wbr/>API <wbr/>Format</span></a></li><li><a href="#example-summary-in-jsonapi-format"><span>Example: <wbr/>Summary in <wbr/>JSON:<wbr/>API <wbr/>Format</span></a></li><li><a href="#supported-endpoints"><span>Supported <wbr/>Endpoints</span></a></li></ul></li><li><a href="#event-types-indexed"><span>Event <wbr/>Types <wbr/>Indexed</span></a></li><li><a href="#why-horizon-doesnt-cover-this"><span>Why <wbr/>Horizon <wbr/>Doesn&#39;t <wbr/>Cover <wbr/>This</span></a></li><li><a href="#command-line-interface-cli"><span>Command-<wbr/>Line <wbr/>Interface (<wbr/>CLI)</span></a></li><li><ul><li><a href="#configuration"><span>Configuration</span></a></li><li><a href="#commands-examples"><span>Commands &amp; <wbr/>Examples</span></a></li><li><ul><li><a href="#1-query-transfers"><span>1. <wbr/>Query transfers</span></a></li><li><a href="#2-account-summaries"><span>2. <wbr/>Account summaries</span></a></li><li><a href="#3-live-watch-streaming"><span>3. <wbr/>Live watch (<wbr/>Streaming)</span></a></li><li><a href="#4-webhook-management"><span>4. <wbr/>Webhook <wbr/>Management</span></a></li></ul></li></ul></li><li><a href="#references"><span>References</span></a></li></ul></div></details></div><div class="site-menu"><nav id="tsd-sidebar-links" class="tsd-navigation"><a href="https://github.com/Miracle656/wraith" class="tsd-nav-link">GitHub</a></nav><nav class="tsd-navigation"><a href="modules.html">Wraith — API Reference - v1.0.0</a><ul class="tsd-small-nested-navigation" id="tsd-nav-container"><li>Loading...</li></ul></nav></div></div></div><footer><p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer><div class="overlay"></div></body></html>
