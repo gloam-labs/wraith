@@ -116,6 +116,23 @@ export interface BillOrderResponse {
 }
 
 /**
+ * A provider 429 on order creation is retried this many times before it reaches
+ * the user.
+ *
+ * The offramp client already does this; bills never opted in. On 2026-11-11 a
+ * user paying for airtime with USDC was told "the payout service is busy, try
+ * again in a few seconds" by a 429 the provider answered in 140ms, with no
+ * Retry-After. Waiting those seconds is our job, not theirs: every Veil user
+ * shares one provider key, so one person can be refused for another's traffic.
+ *
+ * Only creation takes the retry. A 429 is taken to mean the request was refused
+ * before any work was done, so repeating it creates nothing twice. That is the
+ * conventional meaning rather than one Linq has stated, and it is the same
+ * belief the offramp's retry rests on. See docs/idempotency.md.
+ */
+const CREATE_RATE_LIMIT_RETRIES = 2;
+
+/**
  * Create a bill order and get back the address to pay.
  *
  * Nothing is vended until the deposit arrives — this call only reserves the
@@ -126,6 +143,9 @@ export interface BillOrderResponse {
  * sent, but a 5xx or dropped connection is retried, so a lost answer becomes a
  * second order. Nothing is vended without a deposit and the user is shown only
  * the second `wallet`, so the orphan is never paid. See docs/idempotency.md.
+ *
+ * A 429 is waited out and retried, up to {@link CREATE_RATE_LIMIT_RETRIES}
+ * times and never past the deadline, before it is handed to the caller.
  */
 export async function payBill(params: PayBillParams): Promise<BillOrderResponse> {
   const {
@@ -140,19 +160,24 @@ export async function payBill(params: PayBillParams): Promise<BillOrderResponse>
     refundAddress,
   } = params;
 
+  // These are our refusals, not the provider's. Without a code of their own
+  // they fall through to the generic `provider_rejected` fallback, which blames
+  // Linq for a request it was never asked. They stay as a second line of
+  // defence: the routes check the same fields first, before spending a rate
+  // fetch.
   if (!(amountNgn > 0)) {
-    throw new LinqError("amountNgn must be greater than zero", 400);
+    throw new LinqError("amountNgn must be greater than zero", 400, "invalid_request");
   }
   if (!(amountStableCoin > 0)) {
-    throw new LinqError("amountStableCoin must be greater than zero", 400);
+    throw new LinqError("amountStableCoin must be greater than zero", 400, "invalid_request");
   }
   if (!(rate > 0)) {
-    throw new LinqError("rate must be greater than zero", 400);
+    throw new LinqError("rate must be greater than zero", 400, "invalid_request");
   }
   // A missing refund address is only discovered when a bill fails, which is
   // exactly when the user's money is already gone.
   if (!refundAddress) {
-    throw new LinqError("refundAddress is required", 400);
+    throw new LinqError("refundAddress is required", 400, "invalid_request");
   }
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
@@ -162,6 +187,7 @@ export async function payBill(params: PayBillParams): Promise<BillOrderResponse>
         method: "POST",
         deadline,
         operation: "bill_pay",
+        rateLimitRetries: CREATE_RATE_LIMIT_RETRIES,
         body: {
           customerRef,
           billCategory,

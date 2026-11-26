@@ -3,6 +3,7 @@ import { createApp } from "../api";
 import {
   ledgersIndexedTotal,
   transfersStoredTotal,
+  eventsSkippedTotal,
   lastIndexedLedger,
   observeDbQuery,
   recordRpcError,
@@ -75,6 +76,8 @@ describe("Prometheus metrics (#39)", () => {
       ledgersIndexedTotal.inc({ network: "testnet" }, 12);
       transfersStoredTotal.inc({ network: "testnet", type: "fungible" }, 5);
       transfersStoredTotal.inc({ network: "testnet", type: "nft" }, 2);
+      transfersStoredTotal.inc({ network: "testnet", type: "lp" }, 3);
+      transfersStoredTotal.inc({ network: "testnet", type: "host_fn" }, 7);
       lastIndexedLedger.set({ network: "testnet" }, 987_654);
       recordRpcError("retry");
 
@@ -83,6 +86,8 @@ describe("Prometheus metrics (#39)", () => {
       expect(res.text).toContain('ledgers_indexed_total{network="testnet"} 12');
       expect(res.text).toContain('transfers_stored_total{network="testnet",type="fungible"} 5');
       expect(res.text).toContain('transfers_stored_total{network="testnet",type="nft"} 2');
+      expect(res.text).toContain('transfers_stored_total{network="testnet",type="lp"} 3');
+      expect(res.text).toContain('transfers_stored_total{network="testnet",type="host_fn"} 7');
       expect(res.text).toContain('last_indexed_ledger{network="testnet"} 987654');
       expect(res.text).toContain('rpc_errors_total{outcome="retry"} 1');
     });
@@ -156,6 +161,46 @@ describe("Prometheus metrics (#39)", () => {
         .filter((line) => line.startsWith("ledgers_skipped_total{"));
       expect(skipped).toHaveLength(2);
       expect(skipped.join("\n")).not.toMatch(/ledger=|contract=|address=|url=/);
+    });
+  });
+
+  describe("events_skipped_total (#445)", () => {
+    it("carries a network label so testnet and mainnet drops are separate series", async () => {
+      // The key assertion from the issue: a rising malformed count must be
+      // pinnable to a chain.  With one label per (network, reason) pair the
+      // scraper gets two series even if both networks see the same reason.
+      eventsSkippedTotal.inc({ network: "testnet", reason: "malformed" }, 3);
+      eventsSkippedTotal.inc({ network: "mainnet", reason: "malformed" }, 1);
+      eventsSkippedTotal.inc({ network: "testnet", reason: "unrecognised" }, 10);
+
+      const res = await request(app).get("/metrics");
+
+      expect(res.text).toContain('events_skipped_total{network="testnet",reason="malformed"} 3');
+      expect(res.text).toContain('events_skipped_total{network="mainnet",reason="malformed"} 1');
+      expect(res.text).toContain('events_skipped_total{network="testnet",reason="unrecognised"} 10');
+    });
+
+    it("counts nft_parse drops and host_fn drops separately from malformed fungible drops", async () => {
+      eventsSkippedTotal.inc({ network: "testnet", reason: "nft_parse" }, 2);
+      eventsSkippedTotal.inc({ network: "testnet", reason: "host_fn" }, 4);
+      eventsSkippedTotal.inc({ network: "testnet", reason: "malformed" }, 1);
+
+      const res = await request(app).get("/metrics");
+
+      expect(res.text).toContain('events_skipped_total{network="testnet",reason="nft_parse"} 2');
+      expect(res.text).toContain('events_skipped_total{network="testnet",reason="host_fn"} 4');
+      expect(res.text).toContain('events_skipped_total{network="testnet",reason="malformed"} 1');
+    });
+
+    it("label set carries no contract id, address or event id", async () => {
+      eventsSkippedTotal.inc({ network: "testnet", reason: "malformed" }, 1);
+
+      const lines = (await registry.metrics())
+        .split("\n")
+        .filter((line) => line.startsWith("events_skipped_total{"));
+
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).not.toMatch(/contract=|address=|event=|id=/);
     });
   });
 
@@ -275,6 +320,68 @@ describe("Prometheus metrics (#39)", () => {
       const res = await request(app).get("/metrics");
 
       expect(res.text).toContain('http_requests_total{method="GET",route="/transfers/incoming/:address",status="200"} 1');
+    });
+
+    it("labels sub-router endpoints with their full route pattern", async () => {
+      const origLinq = process.env.LINQ_API_KEY;
+      process.env.LINQ_API_KEY = "mock-key";
+      try {
+        const feesRes = await request(app).get("/fees");
+        const searchRes = await request(app).get("/search");
+        const offrampRes = await request(app).get("/offramp/rate");
+        const webhooksRes = await request(app).post("/webhooks").send({});
+
+        const res = await request(app).get("/metrics");
+
+        expect(res.text).toContain(`http_requests_total{method="GET",route="/fees",status="${feesRes.status}"} 1`);
+        expect(res.text).toContain(`http_requests_total{method="GET",route="/search",status="${searchRes.status}"} 1`);
+        expect(res.text).toContain(`http_requests_total{method="GET",route="/offramp/rate",status="${offrampRes.status}"} 1`);
+        expect(res.text).toContain(`http_requests_total{method="POST",route="/webhooks",status="${webhooksRes.status}"} 1`);
+      } finally {
+        if (origLinq === undefined) {
+          delete process.env.LINQ_API_KEY;
+        } else {
+          process.env.LINQ_API_KEY = origLinq;
+        }
+      }
+    }, 15000);
+
+    it("never includes addresses or parameters in route labels and keeps route cardinality bounded", async () => {
+      const { queryAllTransfers } = jest.requireMock("../db");
+      queryAllTransfers.mockResolvedValue({ total: 0, transfers: [], nextCursor: null });
+
+      const addresses = [
+        "GA2C5RFPE6GCKMY3US5PAB6UZLKIGSPIUKSLRB6ZN7J3NQMG6UOPXVHT",
+        "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+        "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBR3WGCT3B",
+      ];
+
+      for (const addr of addresses) {
+        await request(app).get(`/accounts/${addr}/transfers`);
+      }
+
+      const res = await request(app).get("/metrics");
+
+      // Verify full pattern is used
+      expect(res.text).toContain('route="/accounts/:address/transfers"');
+
+      // Verify no address is present in any label
+      for (const addr of addresses) {
+        expect(res.text).not.toContain(addr);
+      }
+
+      // Assert that http_requests_total with route starting with /accounts has only 1 distinct route label value
+      const accountRoutes = res.text
+        .split("\n")
+        .filter((line) => line.startsWith("http_requests_total") && line.includes('route="/accounts/'))
+        .map((line) => {
+          const match = line.match(/route="([^"]+)"/);
+          return match ? match[1] : null;
+        });
+
+      const uniqueAccountRoutes = new Set(accountRoutes);
+      expect(uniqueAccountRoutes.size).toBe(1);
+      expect(uniqueAccountRoutes.has("/accounts/:address/transfers")).toBe(true);
     });
 
     it("excludes /metrics from its own counters", async () => {

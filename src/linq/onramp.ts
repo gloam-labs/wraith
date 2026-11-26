@@ -413,11 +413,14 @@ export async function createOnrampOrder(
 ): Promise<OnrampOrderResponse> {
   const { customerRef, amountStableCoin, walletAddress, rate, coin } = params;
 
+  // Ours, not the provider's: without a code these 400s would be reported as
+  // `provider_rejected` even though Linq was never asked. The route checks the
+  // same fields first; this stays as a second line of defence.
   if (!(amountStableCoin > 0)) {
-    throw new LinqError("amountStableCoin must be greater than zero", 400);
+    throw new LinqError("amountStableCoin must be greater than zero", 400, "invalid_request");
   }
   if (!(rate > 0)) {
-    throw new LinqError("rate must be greater than zero", 400);
+    throw new LinqError("rate must be greater than zero", 400, "invalid_request");
   }
 
   const coinBody: Record<string, true> =
@@ -446,7 +449,7 @@ export async function createOnrampOrder(
 
 /** Exhaustiveness guard: a new {@link OnrampCoin} fails to compile rather than defaulting to Sui. */
 function unsupportedCoin(coin: never): never {
-  throw new LinqError(`Unsupported onramp coin: ${String(coin)}`, 400);
+  throw new LinqError(`Unsupported onramp coin: ${String(coin)}`, 400, "invalid_request");
 }
 
 export interface OnrampStatus {

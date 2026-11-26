@@ -271,6 +271,12 @@ order wrong.
 Linq returns a **bare number** here, not an object like `/b2b/rate` does, so it is
 parsed defensively and anything `≤ 0` is refused rather than passed on as a price.
 
+**The path says onramp; the side of the book depends on the coin.** `coin=xlm` is
+quoted from Linq's buy side (`/onramprate`). `coin=usdc` is quoted from the sell
+side (`/b2b/rate`), because the only thing USDC buys on these routes is a bill —
+see [Which rate a bill is priced at](#which-rate-a-bill-is-priced-at). The rule is
+one function, `ngnRail` in `src/api/ngn.ts`.
+
 ### 4. Create the order
 
 ```
@@ -351,6 +357,47 @@ biller failing does not un-spend their XLM. It is validated before the request,
 because a missing refund address is otherwise only discovered at the moment the
 user's money is already gone.
 
+### Which rate a bill is priced at
+
+Linq has two rates, about 7% apart: a buy side (`/onramprate`) and a sell side
+(`/b2b/rate`). A bill is a sale — crypto in, naira spent — but every bill was
+priced from the buy side, because the clients read `GET /ngn/onramp/rate` for it.
+
+On 2026-11-11 Linq refused a USDC airtime order priced that way:
+
+```
+400  AmountStableCoin and rate do not match the current market rate
+```
+
+The sides stood at 1,480.71 and 1,380.71 that morning. So `GET /ngn/onramp/rate`
+now answers `coin=usdc` from the sell side, and the price guard on `POST
+/ngn/bills` measures against the same number.
+
+| Coin | Side | Why |
+|---|---|---|
+| USDC | sell (`/b2b/rate`) | A USDC bill at the buy rate is refused. |
+| XLM | buy (`/onramprate`) | XLM bills priced this way are accepted and vend. Unchanged. |
+
+Two things here are not known, and are written down so nobody mistakes them for
+facts:
+
+- **That the sell side is what Linq checks a USDC bill against is inferred**, from
+  the refusal above and from cash-outs settling at it. Linq has not confirmed it.
+- **Whether Linq checks an XLM bill's rate at all.** If it does not, and settles
+  an XLM deposit at its own sell-side value, an XLM bill may be vending slightly
+  less than the amount on screen. Nobody has compared the airtime received with
+  the amount asked for.
+
+It is fixed on the rate route, and not by re-pricing the order on the server,
+because the phone computes how much to send from the rate it was given. The
+deposit is whatever the phone decided; see the next section for what Linq does
+with a deposit that does not match the order.
+
+A refused order is not free. Linq starts a cooldown on order creation after any
+attempt, including one it refused, and answers the next one with `429 Rate limit
+exceeded: Please wait before creating another order`. A user who retries a
+refusal sees "busy" instead of the reason.
+
 ### Manual deposit
 
 Linq settles at whatever amount actually arrives, converted at the locked rate —
@@ -405,6 +452,47 @@ instead of failing, marked `stale: true` with a reason. A **4xx is passed
 through unchanged** — that is Linq telling us something true about the request
 (an unverified customer, an order that is not yours), and papering over it with
 a last-known row would turn "this order is not yours" into a status page.
+
+**The stale body has the live answer's shape.** It is built field by field in
+the live field names for the rail — never by spreading the record, whose
+column names (`amountNGN`, `kind`, …) are not the provider's and which carries
+fields no caller should receive (`walletAddress`, `rate`, the settled amounts,
+`txHash`). Fields the record does not hold are left out, not invented.
+
+A stale bill (`GET /ngn/bills/:orderId`):
+
+```json
+{ "orderId": "…", "customerRef": "…",
+  "status": "settled (completed)", "providerStatus": "settled",
+  "billCategory": "airtime",
+  "amountNgn": 1000, "amountStableCoin": 0.75,
+  "updated": "2026-10-02T18:00:00.000Z",
+  "stale": true, "reason": "Linq is unreachable; this is our last known status" }
+```
+
+- `status` is translated exactly as the live route translates it
+  (`billStatusForClients`), so a bill recorded as `settled` still ends the
+  bills screen's wait; the recorded word is kept as `providerStatus`.
+- The deposit `wallet`, `description` and `created` exist only in the
+  provider's answer and are omitted. The address the record holds for a bill
+  is the *refund* address, so it is not sent as `wallet`.
+- `updated` is the record's last update, in the live answer's name.
+
+A stale onramp order (`GET /ngn/onramp/orders/:orderId`):
+
+```json
+{ "orderId": "…", "customerRef": "…",
+  "status": "settled", "providerStatus": "settled",
+  "amount": 6, "amountNgn": 8137,
+  "stale": true, "reason": "Linq is unreachable; this is our last known status" }
+```
+
+- `status` is the recorded word, as the live onramp route sends it, with the
+  same word as `providerStatus`.
+- `amount` is the stablecoin amount under the live status answer's name (the
+  record calls it `amountStableCoin`).
+- The bank details (`bankName`, `accountNumber`, `accountName`) exist only in
+  the provider's answer and are omitted.
 
 Recording happens *after* the response is sent and never throws. The user is
 holding bank details or a deposit address they need; our bookkeeping must not

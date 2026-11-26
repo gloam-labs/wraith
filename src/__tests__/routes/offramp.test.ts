@@ -5,6 +5,7 @@
  */
 import express from "express";
 import request from "supertest";
+import { Keypair } from "@stellar/stellar-sdk";
 
 process.env.LINQ_API_KEY = "test-key";
 
@@ -997,4 +998,122 @@ describe("a replayed order creation", () => {
     expect(mockRowCreate).toHaveBeenCalledTimes(1);
     expect(rows).toHaveLength(1);
   });
+});
+
+// #457: the refund address is where the user's money goes back if an order
+// fails after they have paid. A contract or malformed address reaches the
+// provider and is refused there, which is the one moment the money is gone.
+// Generated addresses, never shortened: these must be real G… accounts so the
+// test exercises the same shape the provider is given.
+const CLASSIC_REFUND = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 11)).publicKey();
+const CONTRACT_REFUND = "CBSJZEIO5C7KC2SF3MKSNXXJSW5G3VTNBX4ATMKUI3B2MR4JKM4R26YF";
+
+/** Plainly fake destination details; nothing here identifies a person. */
+const fakeBankDetails = {
+  bankAccount: "0000000000",
+  bankCode: "000",
+  bankName: "Test Bank",
+  accountName: "Test Person",
+};
+
+describe("the refund address", () => {
+  it("accepts a classic G… account and passes it to the provider", async () => {
+    const res = await place(makeApp(), {
+      ...fakeBankDetails,
+      refundAddress: CLASSIC_REFUND,
+    });
+
+    expect(res.status).toBe(201);
+    expect(mockCreate.mock.calls[0][0].refundAddress).toBe(CLASSIC_REFUND);
+  });
+
+  it("keeps the field optional for app builds that do not send one", async () => {
+    const res = await place(makeApp(), fakeBankDetails);
+
+    expect(res.status).toBe(201);
+    expect(mockCreate.mock.calls[0][0]).not.toHaveProperty("refundAddress");
+  });
+
+  it.each([
+    ["a contract address", CONTRACT_REFUND],
+    ["a malformed address", "not-a-stellar-address"],
+    ["a classic address of the wrong length", `G${'A'.repeat(54)}`],
+    ["a classic address with an invalid character", `G${'0'.repeat(55)}`],
+  ])("refuses %s with invalid_address", async (_label, value) => {
+    const res = await place(makeApp(), {
+      ...fakeBankDetails,
+      refundAddress: value,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("invalid_address");
+    expect(res.body.error).toMatch(/refundAddress/);
+  });
+
+  it.each([
+    ["a number", 42],
+    ["an object", { address: CLASSIC_REFUND }],
+    ["an array", [CLASSIC_REFUND]],
+    ["a boolean", true],
+    ["null", null],
+  ])("refuses %s with invalid_request rather than dropping it", async (_label, value) => {
+    const res = await place(makeApp(), {
+      ...fakeBankDetails,
+      refundAddress: value,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("invalid_request");
+  });
+
+  it("answers every refusal before the idempotency lookup and the provider", async () => {
+    const refusals: Record<string, unknown>[] = [
+      { refundAddress: CONTRACT_REFUND },
+      { refundAddress: "not-a-stellar-address" },
+      { refundAddress: 42 },
+      { refundAddress: null },
+    ];
+
+    for (const refusal of refusals) {
+      mockFindUnique.mockClear();
+      mockCreate.mockClear();
+      mockRowCreate.mockClear();
+      rows.length = 0;
+
+      const res = await place(makeApp(), { ...fakeBankDetails, ...refusal });
+
+      expect(res.status).toBe(400);
+      expect(mockFindUnique).not.toHaveBeenCalled();
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockRowCreate).not.toHaveBeenCalled();
+      expect(rows).toHaveLength(0);
+    }
+  });
+});
+
+describe("the required order fields", () => {
+  const REQUIRED = [
+    "bankAccount",
+    "bankCode",
+    "bankName",
+    "accountName",
+    "walletAddress",
+    "idempotencyKey",
+  ] as const;
+  const BLANKS = ["", "   ", "\n\t "];
+
+  it.each(REQUIRED.flatMap((field) => BLANKS.map((blank) => [field, blank] as const)))(
+    "refuses %s when it is only whitespace (%p)",
+    async (field, blank) => {
+      const res = await place(makeApp(), { ...fakeBankDetails, [field]: blank });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("invalid_request");
+      expect(res.body.error).toMatch(new RegExp(field));
+      expect(mockFindUnique).not.toHaveBeenCalled();
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockRowCreate).not.toHaveBeenCalled();
+      expect(rows).toHaveLength(0);
+    },
+  );
 });

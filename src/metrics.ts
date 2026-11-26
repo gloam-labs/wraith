@@ -243,12 +243,21 @@ export const ledgersIndexedTotal = new Counter({
 /**
  * Rows written by the indexer, split by record type.
  *
- * `type` separates fungible transfers from NFT ones: they come off different
- * parse paths and one can break while the other keeps working.
+ * `type` separates fungible transfers, NFT transfers, liquidity-pool share
+ * records, and host-function log rows.  Each comes off a distinct parse path
+ * and one can break while the others keep working.  `host_fn` is the table
+ * that grew to 1 776 MB and filled disk (#445); its write rate is what an
+ * operator most needs to monitor.
+ *
+ * Argument for including `lp` and `host_fn` here rather than in a second
+ * counter: the counter name "transfers" is admittedly a loose fit for log
+ * rows, but adding a second counter for two values costs readers an extra
+ * query just to get "total rows written".  A `type` label with four fixed
+ * values is cheaper than a second metric, and the help text names all four.
  */
 export const transfersStoredTotal = new Counter({
   name: "transfers_stored_total",
-  help: "Transfer records persisted by the indexer, per network and record type",
+  help: "Rows persisted by the indexer, per network and record type (fungible, nft, lp, host_fn)",
   labelNames: ["network", "type"] as const,
   registers: [registry],
 });
@@ -289,17 +298,78 @@ export const ledgersSkippedTotal = new Counter({
 });
 
 /**
- * Events dropped by the decoder, by reason.
+ * Events dropped by the decoder, by network and reason.
  *
- * `malformed` means a token event that failed to decode; a rising rate points
- * at a contract emitting non-standard events or a decoder bug.
+ * `reason` distinguishes the three drop sites:
+ *  - `malformed`  — a fungible token event whose XDR decoded but produced an
+ *    invalid structure (bad topic count, non-address topic, etc.)
+ *  - `nft_parse`  — an NFT event that `parseNftTransferEvent` returned null for
+ *  - `host_fn`    — a host-function log event that `parseHostFnEvent` threw on
+ *
+ * `unrecognised` events (non-token events filtered out by `parseEvents` before
+ * any decode attempt) are still counted but carry no network label because they
+ * are routine background noise, not errors.  Every other kind carries `network`
+ * so a rising malformed count can be pinned to a chain in a mixed testnet +
+ * mainnet process.
  */
 export const eventsSkippedTotal = new Counter({
   name: "events_skipped_total",
-  help: "Events skipped by the decoder",
-  labelNames: ["reason"] as const,
+  help: "Events dropped during ingest, by network and reason",
+  labelNames: ["network", "reason"] as const,
   registers: [registry],
 });
+
+/**
+ * The live-subscription channels, as a finite label set (#453).
+ *
+ * One per in-process emitter in src/events.ts: `transfer` for new transfers,
+ * `hostfnlog` for new host-function logs. Nothing else may become a value of
+ * the `channel` label.
+ */
+export const SUBSCRIPTION_CHANNELS = ["transfer", "hostfnlog"] as const;
+export type SubscriptionChannel = (typeof SUBSCRIPTION_CHANNELS)[number];
+
+/** True when `value` is one of {@link SUBSCRIPTION_CHANNELS}. */
+export function isSubscriptionChannel(value: unknown): value is SubscriptionChannel {
+  return typeof value === "string" && (SUBSCRIPTION_CHANNELS as readonly string[]).includes(value);
+}
+
+/**
+ * Events a live GraphQL subscriber never received because it read too slowly.
+ *
+ * Each subscription holds at most `maxQueue` unread events (see
+ * `eventsToAsyncIterator` in src/events.ts); past that the oldest is dropped,
+ * so a stalled client cannot grow server memory. Dropping is deliberate, but it
+ * used to be silent: the subscriber was not told and neither was the operator,
+ * and a client that believed it had seen every transfer had not. Any increase
+ * means some subscriber's stream has a gap.
+ *
+ * The queue sits before the subscription's own filter (network, contractId),
+ * so a drop is counted per event the subscriber was sent, whether or not its
+ * filter would have kept it.
+ *
+ * Labelled by `channel` only, from {@link SUBSCRIPTION_CHANNELS}. Never a
+ * subscription id, a contract id, an address or a URL: one series per
+ * subscriber is unbounded cardinality. Messages dropped on a saturated
+ * WebSocket are a separate mechanism (#407) and are not counted here.
+ */
+export const subscriptionEventsDroppedTotal = new Counter({
+  name: "subscription_events_dropped_total",
+  help: "Events dropped from a live subscriber's queue because it read too slowly, by channel",
+  labelNames: ["channel"] as const,
+  registers: [registry],
+});
+
+/**
+ * Record one event dropped from a subscriber's queue.
+ *
+ * Re-checks the channel at runtime so a cast or an untyped caller can never
+ * add a third label value.
+ */
+export function recordSubscriptionEventDropped(channel: SubscriptionChannel): void {
+  if (!isSubscriptionChannel(channel)) return;
+  subscriptionEventsDroppedTotal.inc({ channel });
+}
 
 /** The money-moving rails, as a finite label set. */
 export type OrderRail = "offramp" | "onramp" | "bills";
@@ -467,6 +537,39 @@ export async function observeDbQuery<T>(operation: string, fn: () => Promise<T>)
   }
 }
 
+/**
+ * Total database read operations, labelled by target ("primary" or "replica").
+ */
+export const dbReadsTotal = new Counter({
+  name: "db_reads_total",
+  help: "Total database read operations by target",
+  labelNames: ["target"] as const,
+  registers: [registry],
+});
+
+/**
+ * Total database read fallbacks from a replica to the primary following a connection error.
+ */
+export const dbReadFallbacksTotal = new Counter({
+  name: "db_read_fallbacks_total",
+  help: "Total database read fallbacks from replica to primary",
+  registers: [registry],
+});
+
+// Pre-initialize label combinations so they appear in scrape output even before first read
+dbReadsTotal.labels("primary").inc(0);
+dbReadsTotal.labels("replica").inc(0);
+
+/** Record a read query directed to primary or replica. */
+export function recordDbRead(target: "primary" | "replica"): void {
+  dbReadsTotal.inc({ target });
+}
+
+/** Record a read query fallback from replica to primary after connection failure. */
+export function recordDbFallback(): void {
+  dbReadFallbacksTotal.inc();
+}
+
 /** Record one failed RPC attempt. `outcome` distinguishes a retry from a give-up. */
 export function recordRpcError(outcome: "retry" | "exhausted"): void {
   rpcErrorsTotal.inc({ outcome });
@@ -511,6 +614,57 @@ export const feeQuoteRecordFailuresTotal = new Counter({
   labelNames: ["network"] as const,
   registers: [registry],
 });
+
+/**
+ * Discord role checks, by outcome.
+ *
+ * The bot re-checks every linked member so a role stops counting when the thing
+ * behind it is gone. That work was previously visible only as two log lines, so
+ * "the check is running" and "the check is drowning" looked the same.
+ *
+ * `outcome` is one of three words:
+ *
+ *  - `checked` — the member was checked and the result was applied.
+ *  - `failed` — the check threw (Discord answered with an error, a role could
+ *    not be removed, the chain timed out). The member's roles are left alone and
+ *    their next check is pushed further out.
+ *  - `skipped` — the member was due but the batch had no room for them. A
+ *    sustained non-zero rate here is why "a day" takes longer than a day.
+ *
+ * Never a Discord user id: that would be one series per member.
+ */
+export const discordMemberChecksTotal = new Counter({
+  name: "discord_member_checks_total",
+  help: "Discord member role checks, by outcome",
+  labelNames: ["outcome"] as const,
+  registers: [registry],
+});
+
+/**
+ * How long the oldest member has been waiting for a Discord role check.
+ *
+ * A gauge, not a counter: it is a backlog, and what matters is whether it keeps
+ * growing past the recheck interval. Anything near `DISCORD_RECHECK_INTERVAL_MS`
+ * means the bot is not keeping up with the members it has.
+ */
+export const discordOldestUncheckedAgeSeconds = new Gauge({
+  name: "discord_oldest_unchecked_age_seconds",
+  help: "Age in seconds of the oldest member due for a Discord role check",
+  registers: [registry],
+});
+
+/** Record Discord role checks under a fixed outcome word. */
+export function recordDiscordChecks(outcome: "checked" | "failed" | "skipped", count = 1): void {
+  // Zero is recorded on purpose: prom-client only exports a labelled counter
+  // once that label combination has been touched, and a dashboard needs the
+  // series to exist at zero to show "no failures" rather than "no data".
+  discordMemberChecksTotal.inc({ outcome }, count);
+}
+
+/** Set the age of the oldest member still waiting for a check. */
+export function setDiscordOldestUncheckedAge(seconds: number): void {
+  discordOldestUncheckedAgeSeconds.set(Math.max(0, seconds));
+}
 
 /** Serialize the registry in Prometheus text exposition format. */
 export function renderMetrics(): Promise<string> {
