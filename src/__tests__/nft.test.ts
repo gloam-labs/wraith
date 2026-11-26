@@ -171,7 +171,7 @@ describe("parseNftEvents", () => {
     const [{ record, tokenIdScVal }] = parseNftEvents([makeNftEvent(99n)]);
     expect(record.tokenId).toBe("99");
     // tokenIdScVal must be the u128 ScVal from topic[3]
-    expect(tokenIdScVal.switch()).toBe(xdr.ScValType.scvU128());
+    expect(tokenIdScVal.type).toBe("scvU128");
   });
 
   it("returns an empty array when the batch has no NFT events", () => {

@@ -42,8 +42,8 @@ export function isNftTransferEvent(raw: RawEvent): boolean {
   try {
     const sym = scValToNative(raw.topic[0]);
     if (sym !== "transfer") return false;
-    if (raw.topic[1].switch() !== xdr.ScValType.scvAddress()) return false;
-    if (raw.topic[2].switch() !== xdr.ScValType.scvAddress()) return false;
+    if (raw.topic[1].type !== "scvAddress") return false;
+    if (raw.topic[2].type !== "scvAddress") return false;
   } catch {
     return false;
   }
@@ -75,9 +75,9 @@ export function isNftMintOrBurnEvent(raw: RawEvent): boolean {
   try {
     const sym = scValToNative(raw.topic[0]);
     if (sym !== "mint" && sym !== "burn") return false;
-    if (raw.topic[1].switch() !== xdr.ScValType.scvAddress()) return false;
+    if (raw.topic[1].type !== "scvAddress") return false;
     // A token id, not an amount.
-    if (raw.value.switch() !== xdr.ScValType.scvU32()) return false;
+    if (raw.value.type !== "scvU32") return false;
   } catch {
     return false;
   }

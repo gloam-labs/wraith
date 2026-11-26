@@ -14,19 +14,24 @@ type Behaviour = "down" | "veil" | "other" | "missing";
 const behaviour = new Map<string, Behaviour>();
 const calls: string[] = [];
 
+// The shape stellar-sdk v17 decodes a ledger entry into: variants carry their
+// arm name in `type` and the payload as a property, where v15 used accessor
+// methods (`contractData()`, `instance()`, `executable()`).
 function instanceEntry(hashHex: string) {
   return {
     val: {
-      contractData: () => ({
-        val: () => ({
-          instance: () => ({
-            executable: () => ({
-              switch: () => ({ name: "contractExecutableWasm" }),
-              wasmHash: () => Buffer.from(hashHex, "hex"),
-            }),
-          }),
-        }),
-      }),
+      type: "contractData",
+      contractData: {
+        val: {
+          type: "scvContractInstance",
+          instance: {
+            executable: {
+              type: "contractExecutableWasm",
+              wasmHash: { value: Buffer.from(hashHex, "hex") },
+            },
+          },
+        },
+      },
     },
   };
 }

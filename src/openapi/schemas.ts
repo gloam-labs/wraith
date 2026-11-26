@@ -253,6 +253,10 @@ export const transferSchema = z.object({
   ledgerClosedAt: z.string().datetime({ offset: true }),
   txHash: z.string(),
   eventId: z.string(),
+  /** CAP-84 muxed contract id on the sender, decimal string. Absent or null when not muxed. */
+  fromMuxedId: z.string().nullable().optional(),
+  /** CAP-84 muxed contract id on the recipient, decimal string. Absent or null when not muxed. */
+  toMuxedId: z.string().nullable().optional(),
   direction: z.enum(["incoming", "outgoing"]).optional(),
 });
 
@@ -740,6 +744,13 @@ export const offrampOrderStatus = z
 
 export const offrampOrderResponseSchema = z.object({
   id: z.string(),
+  /**
+   * Bearer token that proves this client created the order. Returned once,
+   * here and on a replay; send it as `Authorization: Bearer …` to
+   * `GET /offramp/orders/{orderId}`. Only its hash is stored, so it cannot be
+   * reissued by looking the order up.
+   */
+  accessToken: z.string(),
   walletAddress: z.string().openapi({ description: "Deposit address the stablecoin is sent to." }),
   chain: z.string(),
   coin: z.string(),

@@ -1,4 +1,5 @@
 import createFetchClient, { type Client } from "openapi-fetch";
+import type { CandlesPaths } from "./candles";
 import type { paths } from "./schema";
 
 /** Options for {@link createWraithClient}. */
@@ -11,8 +12,13 @@ export interface WraithClientOptions {
   fetch?: typeof fetch;
 }
 
-/** A typed openapi-fetch client bound to the Wraith OpenAPI spec. */
-export type WraithClient = Client<paths>;
+/**
+ * A typed openapi-fetch client bound to the Wraith OpenAPI spec.
+ *
+ * `CandlesPaths` is intersected in because `/candles` is only registered in the
+ * spec on OHLC-enabled deployments; see `./candles.ts`.
+ */
+export type WraithClient = Client<paths & CandlesPaths>;
 
 /**
  * Create a typed Wraith API client. The returned client is consumed by the
@@ -21,7 +27,7 @@ export type WraithClient = Client<paths>;
  */
 export function createWraithClient(options: WraithClientOptions): WraithClient {
   const { baseUrl, headers, fetch: fetchImpl } = options;
-  return createFetchClient<paths>({
+  return createFetchClient<paths & CandlesPaths>({
     baseUrl: baseUrl.replace(/\/$/, ""),
     headers,
     ...(fetchImpl ? { fetch: fetchImpl } : {}),

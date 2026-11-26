@@ -156,9 +156,12 @@ export async function isVeilWallet(wallet: string): Promise<boolean | "missing" 
     const result = await rpc().getLedgerEntries(new Contract(wallet).getFootprint());
     const entry = result.entries[0];
     if (!entry) return "missing";
-    const executable = entry.val.contractData().val().instance().executable();
-    if (executable.switch().name !== "contractExecutableWasm") return false;
-    return walletWasmHashes().includes(Buffer.from(executable.wasmHash()).toString("hex"));
+    if (entry.val.type !== "contractData") return false;
+    const instanceVal = entry.val.contractData.val;
+    if (instanceVal.type !== "scvContractInstance") return false;
+    const executable = instanceVal.instance.executable;
+    if (executable.type !== "contractExecutableWasm") return false;
+    return walletWasmHashes().includes(Buffer.from(executable.wasmHash.value).toString("hex"));
   });
 }
 

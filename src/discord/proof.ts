@@ -135,7 +135,7 @@ export function verifyPasskeyProof(proof: PasskeyProof, challenge: Buffer, rpId:
 }
 
 /** Check the spending account's Ed25519 signature over the statement hash. */
-export function verifySpendingProof(address: string, signature: Buffer, challenge: Buffer): boolean {
+export function verifySpendingProof(address: string, signature: Uint8Array, challenge: Buffer): boolean {
   if (!StrKey.isValidEd25519PublicKey(address) || signature.length !== 64) return false;
   try {
     return Keypair.fromPublicKey(address).verify(challenge, signature);

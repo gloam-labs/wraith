@@ -49,6 +49,15 @@ export interface TransferRecord {
   eventType: string; // "transfer" | "mint" | "burn" | "clawback"
   fromAddress: string | null;
   toAddress: string | null;
+  /**
+   * CAP-84 muxed contract id on the sender, as a decimal string, or null when
+   * the address is not muxed. The address itself stays the base C-address, so
+   * every existing query by contract id keeps working; this is what tells two
+   * customers of one contract apart.
+   */
+  fromMuxedId?: string | null;
+  /** CAP-84 muxed contract id on the recipient. See {@link fromMuxedId}. */
+  toMuxedId?: string | null;
   amount: string; // i128 as decimal string
   ledger: number;
   ledgerClosedAt: Date;
@@ -101,6 +110,8 @@ const TRANSFER_SELECTABLE_FIELDS = [
   "eventType",
   "fromAddress",
   "toAddress",
+  "fromMuxedId",
+  "toMuxedId",
   "amount",
   "ledger",
   "ledgerClosedAt",
@@ -146,6 +157,10 @@ const TRANSFER_FIELD_TYPES = {
   eventType: { type: "string" as const },
   fromAddress: { type: "string" as const },
   toAddress: { type: "string" as const },
+  // Queryable with `$filter=toMuxedId eq '…'`. String, because the id is a
+  // uint64 and a numeric filter would lose the top bits.
+  fromMuxedId: { type: "string" as const },
+  toMuxedId: { type: "string" as const },
   amount: { type: "string" as const },
   ledger: { type: "number" as const },
   ledgerClosedAt: { type: "date" as const },
@@ -461,6 +476,8 @@ export async function queryTransfers(params: TransferQueryParams) {
         eventType: requestedSelect.includes("eventType"),
         fromAddress: requestedSelect.includes("fromAddress"),
         toAddress: requestedSelect.includes("toAddress"),
+        fromMuxedId: requestedSelect.includes("fromMuxedId"),
+        toMuxedId: requestedSelect.includes("toMuxedId"),
         amount: requestedSelect.includes("amount") || requestedSelect.includes("displayAmount"),
         ledger: requestedSelect.includes("ledger"),
         ledgerClosedAt: requestedSelect.includes("ledgerClosedAt"),
@@ -1017,6 +1034,8 @@ export async function queryAllTransfers(params: AllTransfersQueryParams) {
         eventType: requestedSelect.includes("eventType"),
         fromAddress: requestedSelect.includes("fromAddress"),
         toAddress: requestedSelect.includes("toAddress"),
+        fromMuxedId: requestedSelect.includes("fromMuxedId"),
+        toMuxedId: requestedSelect.includes("toMuxedId"),
         amount: requestedSelect.includes("amount") || requestedSelect.includes("displayAmount"),
         ledger: requestedSelect.includes("ledger"),
         ledgerClosedAt: requestedSelect.includes("ledgerClosedAt"),
