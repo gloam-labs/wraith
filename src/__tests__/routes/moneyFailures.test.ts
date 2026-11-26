@@ -126,7 +126,7 @@ import { networkMiddleware } from "../../middleware/network";
 import { getOfframpStatus } from "../../linq/client";
 import { recordNgnOrder } from "../../linq/ngnOrders";
 import { computeSignature, SIGNATURE_HEADER } from "../../linq/webhook";
-import { moneyFailuresTotal, _resetMetrics } from "../../metrics";
+import { moneyFailuresTotal, webhookAmountSkippedTotal, _resetMetrics } from "../../metrics";
 import { installFakeLinq, type FakeLinq } from "../fakes/linqProvider";
 
 const mockStatus = getOfframpStatus as jest.Mock;
@@ -518,6 +518,111 @@ describe("ordinary validation errors are not incidents", () => {
 
     expect(tables.offrampOrder[0].status).toBe("completed");
     expect(tables.moneyFailure).toHaveLength(0);
+  });
+});
+
+// ─── An unusable amount does not drop the status ─────────────────────────────
+
+describe("a webhook whose naira amount cannot be used", () => {
+  const BILL_ID = "00000000-0000-4000-8000-0000000000c1";
+
+  async function seedBill() {
+    await recordNgnOrder({
+      network: "testnet",
+      kind: "bill",
+      orderId: BILL_ID,
+      customerRef: "ref_test_0001",
+      walletAddress: WALLET,
+      coin: "usdc",
+      amountStableCoin: 1,
+      amountNgn: 1500,
+      rate: 1500,
+      status: "processing",
+      billCategory: "airtime",
+      provider: "Fake Telco",
+    });
+  }
+
+  it("a failed order reported with amount 0 still fails, and is recorded as a money failure", async () => {
+    const app = makeApp();
+    await placeOrder(app);
+    const orderId = tables.offrampOrder[0].orderId;
+
+    await deliver(app, { event: "order.failed", orderId, status: "failed", amountNGN: 0 });
+    await reconciled();
+
+    expect(tables.offrampOrder[0].status).toBe("failed");
+    expect(tables.offrampOrder[0].settledNGN ?? null).toBeNull();
+    expect(tables.moneyFailure).toHaveLength(1);
+    expect(tables.moneyFailure[0].kind).toBe("payout_rejected");
+    expect(tables.moneyFailure[0].orderId).toBe(orderId);
+
+    // The drop is visible: one sample, labelled by reason alone.
+    const metric = await webhookAmountSkippedTotal.get();
+    const sample = metric.values.find((v) => v.labels.reason === "implausible");
+    expect(sample?.value).toBe(1);
+    expect(Object.keys(sample!.labels)).toEqual(["reason"]);
+  });
+
+  it("an amount above the ceiling updates the status and leaves settledNGN alone", async () => {
+    const app = makeApp();
+    await seedBill();
+
+    await deliver(app, {
+      event: "order.completed",
+      orderId: BILL_ID,
+      status: "completed",
+      amountStableCoin: 1,
+      amountNGN: 100_000_001,
+    });
+    await reconciled();
+
+    expect(tables.ngnOrder[0].status).toBe("completed");
+    expect(tables.ngnOrder[0].settledStableCoin).toBe("1");
+    expect(tables.ngnOrder[0].settledNGN ?? null).toBeNull();
+    const metric = await webhookAmountSkippedTotal.get();
+    expect(metric.values.find((v) => v.labels.reason === "implausible")?.value).toBe(1);
+  });
+
+  it("a plain decimal string amount is accepted and stored as the same figure", async () => {
+    const app = makeApp();
+    await seedBill();
+
+    await deliver(app, {
+      event: "order.completed",
+      orderId: BILL_ID,
+      status: "completed",
+      amountStableCoin: 1,
+      amountNGN: "1500",
+    });
+    await reconciled();
+
+    expect(tables.ngnOrder[0].status).toBe("completed");
+    expect(tables.ngnOrder[0].settledNGN).toBe("1500");
+    // Accepted, so nothing was discarded and nothing was counted.
+    const metric = await webhookAmountSkippedTotal.get();
+    expect(metric.values).toHaveLength(0);
+  });
+
+  it("a nonsense amount does not drop the status, and the failure is still recorded", async () => {
+    const app = makeApp();
+    await seedBill();
+
+    await deliver(app, {
+      event: "order.failed",
+      orderId: BILL_ID,
+      status: "failed: provider declined",
+      amountNGN: { naira: "1500" },
+    });
+    await reconciled();
+
+    expect(tables.ngnOrder[0].status).toBe("failed: provider declined");
+    expect(tables.ngnOrder[0].settledNGN ?? null).toBeNull();
+    expect(tables.moneyFailure).toHaveLength(1);
+    expect(tables.moneyFailure[0].kind).toBe("order_failed");
+    expect(tables.moneyFailure[0].rail).toBe("bill");
+    const metric = await webhookAmountSkippedTotal.get();
+    expect(metric.values.find((v) => v.labels.reason === "unparseable")?.value).toBe(1);
   });
 });
 

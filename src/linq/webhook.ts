@@ -47,7 +47,11 @@ export function verifySignature(
   return crypto.timingSafeEqual(a, b);
 }
 
-/** The shape Linq posts. Amounts are numbers on the wire. */
+/**
+ * The shape Linq posts. Amounts are documented as numbers on the wire, but
+ * `sanitizeNairaAmount` in amount.ts documents a decimal string, so both are
+ * accepted here; {@link readWebhookAmountNgn} converts once at the router.
+ */
 export interface LinqWebhookEvent {
   event: "order.processing" | "order.completed" | "order.failed";
   orderId: string;
@@ -58,7 +62,7 @@ export interface LinqWebhookEvent {
    */
   network?: string;
   amountStableCoin?: number;
-  amountNGN?: number;
+  amountNGN?: number | string;
   amountFormatted?: string;
   currency?: string;
   chain?: string;
@@ -117,6 +121,37 @@ export const NGN_SCALE_FACTOR = 100;
 export function isPlausibleNgn(amountNGN: number | undefined): boolean {
   if (typeof amountNGN !== "number" || !Number.isFinite(amountNGN)) return false;
   return amountNGN > MIN_PLAUSIBLE_NGN && amountNGN <= MAX_PLAUSIBLE_NGN;
+}
+
+/** Why a webhook's amountNGN was discarded. Bounded: it is a metric label. */
+export type WebhookAmountSkip = "unparseable" | "implausible";
+
+/**
+ * Turn a webhook's `amountNGN` into a usable number, or say why it cannot be.
+ *
+ * Accepts a number or a plain decimal string, converted once here so nothing
+ * downstream sees a string. Anything else is "unparseable" and an out-of-band
+ * number is "implausible". Absent is neither: it is simply no amount.
+ *
+ * A skip discards the amount only. The caller must still apply the event's
+ * status, because a failed order is the event this webhook exists to catch.
+ */
+export function readWebhookAmountNgn(raw: unknown): {
+  amountNGN?: number;
+  skipped?: WebhookAmountSkip;
+} {
+  if (raw == null) return {};
+
+  let value: number;
+  if (typeof raw === "number") {
+    value = raw;
+  } else if (typeof raw === "string" && /^\d+(\.\d+)?$/.test(raw.trim())) {
+    value = Number(raw.trim());
+  } else {
+    return { skipped: "unparseable" };
+  }
+
+  return isPlausibleNgn(value) ? { amountNGN: value } : { skipped: "implausible" };
 }
 
 /**

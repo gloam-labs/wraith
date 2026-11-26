@@ -425,6 +425,22 @@ export const moneyFailuresTotal = new Counter({
 });
 
 /**
+ * Webhook `amountNGN` values discarded at the router.
+ *
+ * The event's status is still applied when this fires, so this counts lost
+ * amounts, not lost events. `reason` is one of two fixed values: `implausible`
+ * (a number outside the band) or `unparseable` (neither a number nor a decimal
+ * string). Never an order id, the amount or the raw field, for the same reason
+ * as {@link moneyFailuresTotal}.
+ */
+export const webhookAmountSkippedTotal = new Counter({
+  name: "webhook_amount_skipped_total",
+  help: "Webhook amountNGN values discarded; the event's status was still applied",
+  labelNames: ["reason"] as const,
+  registers: [registry],
+});
+
+/**
  * The highest ledger the indexer has committed, per network.
  *
  * A gauge, not a counter: it is a position, and comparing it against the chain
