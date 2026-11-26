@@ -25,6 +25,9 @@ import { createOfframpRouter } from "../../api/offramp";
 import { networkMiddleware } from "../../middleware/network";
 import { RAIL_ERROR_CODES } from "../../api/errors";
 import { LinqError } from "../../linq/client";
+import { installOpenApiValidator } from "../../openapi/responseValidator";
+
+installOpenApiValidator();
 
 jest.mock("../../linq/onramp", () => {
   const actual = jest.requireActual("../../linq/onramp");

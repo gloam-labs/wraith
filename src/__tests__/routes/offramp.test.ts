@@ -59,6 +59,9 @@ import { createOfframpRouter, requestFingerprint, __resetCoinlessRateLog } from 
 import { networkMiddleware } from "../../middleware/network";
 import { LinqError, createOfframpOrder, getOfframpStatus } from "../../linq/client";
 import { ngnPerCoin } from "../../api/ngn";
+import { installOpenApiValidator } from "../../openapi/responseValidator";
+
+installOpenApiValidator();
 
 const mockCreate = createOfframpOrder as jest.Mock;
 const mockStatus = getOfframpStatus as jest.Mock;

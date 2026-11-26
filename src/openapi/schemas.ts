@@ -735,17 +735,20 @@ export const offrampOrderBodySchema = z
   .passthrough();
 
 export const offrampOrderStatus = z
-  .enum(["pending", "waiting_for_deposit", "processing", "completed", "failed", "expired"])
+  .string()
   .openapi({ description: "Client-facing status mapped from the provider's raw one." });
 
 export const offrampOrderResponseSchema = z.object({
   id: z.string(),
+  accessToken: z.string().optional().openapi({ description: "Bearer credential required to read the order back. Shown once; only its SHA-256 is stored." }),
   walletAddress: z.string().openapi({ description: "Deposit address the stablecoin is sent to." }),
   chain: z.string(),
   coin: z.string(),
+  coinType: z.string().optional(),
   amountStableCoin: z.number(),
   amountNGN: z.number(),
   rate: z.number(),
+  currency: z.string().optional(),
   status: offrampOrderStatus,
   providerStatus: z.string().optional().openapi({ description: "Raw provider status, when the order is not a replay." }),
   /** True when an existing idempotencyKey returned the original order instead of creating one. */
@@ -776,6 +779,9 @@ export const offrampOrderStatusResponseSchema = z.object({
    * exists so the provider is not named to users; openapi.json is published.
    */
   source: z.enum(["live", "cache"]),
+  currency: z.string().optional(),
+  created: z.string().optional(),
+  updated: z.string().optional(),
 });
 
 /**

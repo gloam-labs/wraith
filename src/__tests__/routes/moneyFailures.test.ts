@@ -151,6 +151,9 @@ import { recordNgnOrder } from "../../linq/ngnOrders";
 import { computeSignature, SIGNATURE_HEADER } from "../../linq/webhook";
 import { moneyFailuresTotal, _resetMetrics } from "../../metrics";
 import { installFakeLinq, type FakeLinq } from "../fakes/linqProvider";
+import { installOpenApiValidator } from "../../openapi/responseValidator";
+
+installOpenApiValidator();
 
 const mockStatus = getOfframpStatus as jest.Mock;
 
