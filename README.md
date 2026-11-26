@@ -131,6 +131,22 @@ By default, this seeds `testnet`. To seed `mainnet`:
 npm run db:seed -- --network=mainnet
 ```
 
+### 6. Rebuild account summaries (maintenance)
+
+`AccountSummary` is maintained incrementally during indexing, but can be repaired per network from `TokenTransfer` with:
+
+```bash
+npm run backfill:summaries -- --network testnet
+```
+
+Flags:
+- `--network <testnet|mainnet>` *(required)* — rebuilds only the named network; the other network's rows are untouched.
+- `--dry-run` — scans transfers and prints how many summary rows would be inserted, updated, or deleted without writing anything.
+- `--accept-truncated-history` — required if older transfers for that network have already been pruned by `RETENTION_DAYS` (when the oldest stored transfer is newer than the oldest summary, or no transfers remain while summaries exist); without this flag the command refuses to shrink lifetime totals.
+- `--batch-size <num>` — rows per keyset page (overrides `BACKFILL_BATCH_SIZE`, default `5000`).
+
+The command pages `TokenTransfer` by keyset (`id`) and applies only the computed diff inside one transaction, so API readers never observe an empty `AccountSummary` table during a rebuild. Note that if retention pruning has already deleted older transfers, a rebuild can only recompute totals from the transfers still stored in Postgres unless `--accept-truncated-history` is passed explicitly.
+
 You can now query the seeded data:
 
 ```bash
@@ -200,6 +216,19 @@ To seed the database when running via Docker, run the seed command in a separate
 ```bash
 npm run db:seed
 ```
+
+***
+
+## Testing
+
+| Command | What it does |
+| ------- | ------------ |
+| `npm test` | Runs the unit suite. No coverage is collected, so it is the fastest full run and does **not** check the coverage floor. |
+| `npm run test:coverage` | The command CI runs. Collects coverage over `src/**/*.ts` — including source files no test imports, which then show at 0% — and fails if the global floor is not met. |
+| `npx jest src/__tests__/decoder.test.ts` | Runs a single test file quickly. No coverage, no floor — just the one file. |
+| `npm run test:watch` | Interactive watch mode. No coverage. |
+| `npm run test:integration` | Docker-based integration suite (separate config; needs the `docker compose -f docker-compose.test.yml` stack). |
+| `npm run test:chaos` | Chaos suite, also Docker-based. |
 
 ***
 
@@ -500,6 +529,32 @@ both chains in a single round-trip:
 }
 ```
 
+`transfers` accepts the same filters as the REST transfer routes, with the
+same validation — `limit` must be 1–200, `fromLedger`/`toLedger` are inclusive
+ledger bounds, `fromDate`/`toDate` are ISO 8601 datetimes with an offset,
+`eventTypes` is a list of `transfer`, `mint`, `burn` or `clawback`
+(case-insensitive), and `token` filters to one token contract like
+`contractId` does. `Transfer` carries the `id` REST already returns, and
+`TokenSummary` carries `displayTotalReceived`, `displayTotalSent` and
+`displayNetFlow` — the raw totals scaled by the token's decimals, as
+`GET /summary/:address` computes them.
+
+```graphql
+{
+  transfers(address: "GABC…", limit: 2, eventTypes: ["transfer"], fromLedger: 1000) {
+    transfers { id eventId amount displayAmount }
+    nextCursor
+    hasMore
+  }
+}
+```
+
+Page with the cursor, not the offset: pass the previous page's `nextCursor`
+back as `cursor` to continue. A malformed cursor is an error, not a silent
+first page — the list would otherwise restart from the top and loop forever.
+`cursor` and `offset` do not combine; when a cursor is given, the offset is
+ignored, exactly as on REST.
+
 **WebSockets** take it on the upgrade URL — `ws://host/subscribe/GABC…?network=mainnet`
 — and the stream is filtered to that network. A socket opened with an invalid or
 un-enabled selector is closed with code `1008` and the reason, rather than left
@@ -558,18 +613,28 @@ ledgers_indexed_total{network="mainnet"} 48213
 # HELP last_indexed_ledger Highest ledger sequence committed by the indexer, per network
 # TYPE last_indexed_ledger gauge
 last_indexed_ledger{network="mainnet"} 5842100
+# HELP transfers_stored_total Rows persisted by the indexer, per network and record type (fungible, nft, lp, host_fn)
+# TYPE transfers_stored_total counter
+transfers_stored_total{network="mainnet",type="fungible"} 182400
+transfers_stored_total{network="mainnet",type="nft"} 310
+transfers_stored_total{network="mainnet",type="lp"} 92
+transfers_stored_total{network="mainnet",type="host_fn"} 182802
+# HELP events_skipped_total Events dropped during ingest, by network and reason
+# TYPE events_skipped_total counter
+events_skipped_total{network="mainnet",reason="unrecognised"} 94100
+events_skipped_total{network="mainnet",reason="malformed"} 0
 ```
 
 | Metric | Type | Labels | What it says |
 | ------ | ---- | ------ | ------------ |
 | `ledgers_indexed_total` | counter | `network` | Ledgers the indexer has advanced through. A flat `rate()` on a network whose loop should be running means it has stalled. |
-| `transfers_stored_total` | counter | `network`, `type` | Rows persisted, split `fungible` / `nft` — one parse path can break while the other keeps working. |
+| `transfers_stored_total` | counter | `network`, `type` | Rows persisted, split `fungible` / `nft` / `lp` / `host_fn` — each comes off a distinct parse path and one can break while the others keep working. `host_fn` is the table that once grew to 1 776 MB; its write rate is the number an operator most needs to watch. |
 | `rpc_errors_total` | counter | `outcome` | Failed RPC attempts. `retry` counts attempts `withRetry` absorbed, `exhausted` counts calls that gave up — a degrading endpoint shows up in `retry` long before it fails a call. |
-| `events_skipped_total` | counter | `reason` | Events the decoder dropped. `unrecognised` is non-token events (normal); `malformed` is token events that failed to decode — a rising rate points at a non-standard contract or a decoder bug. |
+| `events_skipped_total` | counter | `network`, `reason` | Events dropped during ingest. `unrecognised` is non-token events (normal background noise); `malformed` is a fungible token event whose structure was invalid; `nft_parse` is an NFT event `parseNftTransferEvent` returned null for; `host_fn` is a host-function log event that threw during parse. All carry `network` so a rising count can be pinned to a chain in a process running multiple networks. |
 | `last_indexed_ledger` | gauge | `network` | Highest committed ledger. Against the chain tip, this is lag. |
 | `db_query_duration_seconds` | histogram | `operation` | Duration of instrumented DB operations, failures included. |
-| `http_requests_total` | counter | `method`, `route`, `status` | HTTP requests served. `route` is the Express route *pattern*, never the raw URL, so addresses never become label values; an unmatched request reports `route="unknown"`. |
-| `http_request_duration_seconds` | histogram | `method`, `route` | HTTP latency, 5 ms to 40 s. No `status` label — the split is rarely worth the extra series. |
+| `http_requests_total` | counter | `method`, `route`, `status` | HTTP requests served. `route` is the full Express route *pattern* (e.g. `/search`, `/offramp/rate`, `/accounts/:address/transfers`), never the raw URL, so addresses and dynamic parameters never become label values; an unmatched request reports `route="unknown"`. |
+| `http_request_duration_seconds` | histogram | `method`, `route` | HTTP latency, 5 ms to 40 s. Labeled by method and full route pattern. No `status` label — the split is rarely worth the extra series. |
 | `provider_request_duration_seconds` | histogram | `provider`, `operation`, `outcome` | Time inside a payment-provider call (Linq), separately from the request. Same unit and buckets as the HTTP histogram: `http_request_duration_seconds - provider_request_duration_seconds` is wraith's own time. `operation` is a fixed list (`offramp_order`, `bill_pay`, …), never a URL. |
 
 Standard `process_*` and `nodejs_*` metrics are exported alongside these.
@@ -617,14 +682,25 @@ per-chain condition — and a `503 down` verdict still reports every network.
 
 All token transfers **received** by an address.
 
-| Param        | Type   | Description                                  |
-| ------------ | ------ | -------------------------------------------- |
-| `network`    | string | `testnet` or `mainnet` (see above)           |
-| `contractId` | string | Filter to a specific token contract (`C...`) |
-| `fromLedger` | int    | Inclusive lower ledger bound                 |
-| `toLedger`   | int    | Inclusive upper ledger bound                 |
-| `limit`      | int    | Page size (max 200, default 50)              |
-| `offset`     | int    | Pagination offset                            |
+| Param          | Type   | Description |
+| -------------- | ------ | ----------- |
+| `network`      | string | `testnet` or `mainnet` (see above) |
+| `contractId`   | string | Filter to a specific token contract (`C...`) |
+| `token`        | string | Filter to a specific token contract (`C...`); the same filter as `contractId`, and it wins if both are sent |
+| `fromLedger`   | int    | Inclusive lower ledger bound |
+| `toLedger`     | int    | Inclusive upper ledger bound |
+| `fromDate`     | string | ISO 8601 inclusive lower bound on `ledgerClosedAt` |
+| `toDate`       | string | ISO 8601 inclusive upper bound on `ledgerClosedAt` |
+| `eventType`    | string | Comma-separated event types: `transfer`, `mint`, `burn`, `clawback` |
+| `limit`        | int    | Page size (1–200, default 50) |
+| `offset`       | int    | Pagination offset (default 0) |
+| `cursor`       | string | Opaque pagination cursor; continue from `nextCursor` |
+| `includeTotal` | bool   | Also return an exact `total`. Runs a COUNT over every match, so it is markedly slower; omit it and use `hasMore` / `nextCursor` |
+| `$filter`      | string | OData filter expression |
+| `$select`      | string | Comma-separated field list to return |
+
+The same parameters apply to `GET /transfers/outgoing/:address` and the combined
+`GET /transfers/address/:address` route, which adds a per-row `direction`.
 
 ```bash
 # All incoming transfers for an address
@@ -653,6 +729,397 @@ All token events emitted within a transaction.
 ```bash
 curl "http://localhost:3000/transfers/tx/abcdef1234567890..."
 ```
+
+***
+
+### `GET /transfers/address/:address/export.csv`
+
+Downloads every transfer matching the filters as a CSV attachment. The same
+filters as the JSON transfer routes apply, minus pagination and OData —
+`limit`, `offset`, `cursor`, `$filter` and `$select` have no meaning in a
+streamed download. The handler caps the export at 10,000 rows.
+
+| Param        | Type   | Description |
+| ------------ | ------ | ----------- |
+| `network`    | string | `testnet` or `mainnet` (see above) |
+| `contractId` | string | Filter to a specific token contract (`C...`) |
+| `token`      | string | Filter to a specific token contract (`C...`); same filter as `contractId` and wins if both are sent |
+| `fromLedger` | int    | Inclusive lower ledger bound |
+| `toLedger`   | int    | Inclusive upper ledger bound |
+| `fromDate`   | string | ISO 8601 inclusive lower bound on `ledgerClosedAt` |
+| `toDate`     | string | ISO 8601 inclusive upper bound on `ledgerClosedAt` |
+| `eventType`  | string | Comma-separated event types: `transfer`, `mint`, `burn`, `clawback` |
+
+```bash
+curl -OJ "http://localhost:3000/transfers/address/<G-address>/export.csv?fromLedger=5840000&eventType=transfer,mint"
+```
+
+Columns: `id`, `contractId`, `eventType`, `fromAddress`, `toAddress`, `amount`,
+`displayAmount`, `ledger`, `ledgerClosedAt`, `txHash`, `eventId`, `isSac`,
+`createdAt`.
+
+***
+
+### `GET /summary/:address` · `GET /accounts/:address/summary`
+
+Aggregate token totals for one address, grouped by token contract. Both routes
+take the same path and query parameters. `/summary/:address` answers from
+indexed transfers and returns a `tokens` list; `/accounts/:address/summary`
+reads the materialized account-summary table and returns an `assets` list with
+the same totals plus `net` and `lastActivityAt`.
+
+| Param        | Type   | Description |
+| ------------ | ------ | ----------- |
+| `network`    | string | `testnet` or `mainnet` (see above) |
+| `contractId` | string | Filter to a specific token contract (`C...`) |
+| `fromDate`   | string | ISO 8601 inclusive lower bound on `ledgerClosedAt` |
+| `toDate`     | string | ISO 8601 inclusive upper bound on `ledgerClosedAt` |
+
+```bash
+curl "http://localhost:3000/accounts/<G-address>/summary?contractId=<C-address>"
+```
+
+```json
+{
+  "address": "<G-address>",
+  "assets": [
+    {
+      "contractId": "<C-address>",
+      "totalSent": "10000000000",
+      "totalReceived": "50000000000",
+      "net": "40000000000",
+      "displayTotalSent": "1000.0000000",
+      "displayTotalReceived": "5000.0000000",
+      "displayNet": "4000.0000000",
+      "txCount": 42,
+      "lastActivityAt": "2025-01-01T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+***
+
+### `GET /accounts/:address/balance`
+
+Per-token balance for an address, **derived by summing indexed transfers**, not
+read from chain. The response says so in `derivedFromLedger` and `note`:
+history before the indexer's start ledger is missing, and an address that was
+net-negative over the indexed window can read negative.
+
+| Param     | Type   | Description |
+| --------- | ------ | ----------- |
+| `network` | string | `testnet` or `mainnet` (see above) |
+
+```bash
+curl "http://localhost:3000/accounts/<G-address>/balance?network=mainnet"
+```
+
+```json
+{
+  "address": "<G-address>",
+  "network": "mainnet",
+  "balances": [
+    { "contractId": "<C-address>", "balance": "50000000000", "displayBalance": "5000.0000000" }
+  ],
+  "derivedFromLedger": true,
+  "note": "Derived by summing indexed transfers, not read from chain. Excludes any history before the indexer's start ledger."
+}
+```
+
+Under JSON:API this route is transformed as a single `account-summary`
+resource with an empty `id`, because the transform keys on `/accounts/` and the
+balance body has no top-level `id` or `contractId`. That mismatch is tracked in
+issue #397; this documents what the code does today.
+
+***
+
+### `GET /accounts/:address/transfers`
+
+All token transfers sent or received by an address. Accepts exactly the same
+query parameters as the transfer routes above, including the OData `$filter` /
+`$select` pair and cursor pagination. Returns the same page envelope —
+`{ hasMore, nextCursor?, limit, offset, total?, transfers }` — and each row
+carries a `direction` of `incoming` or `outgoing`.
+
+```bash
+curl "http://localhost:3000/accounts/<G-address>/transfers?token=<C-address>&limit=20&includeTotal=true"
+```
+
+***
+
+### `GET /search`
+
+Prefix search across indexed accounts, token assets and contracts. The query is
+trimmed and upper-cased, then matched against the same btree indexes the list
+routes use; at most 10 hits are returned, accounts first, then assets, then
+contracts, de-duplicated by value. Cached in Redis when the deployment has it.
+
+| Param     | Type   | Description |
+| --------- | ------ | ----------- |
+| `network` | string | `testnet` or `mainnet` (see above) |
+| `q`       | string | Required. 1–80 characters; trimmed before matching |
+
+```bash
+curl "http://localhost:3000/search?q=<G-address-prefix>"
+```
+
+```json
+{
+  "query": "<G-address-prefix>",
+  "count": 1,
+  "results": [
+    { "type": "account", "value": "<G-address>", "lastActivityAt": "2025-01-01T00:00:00.000Z" }
+  ]
+}
+```
+
+***
+
+### `GET /assets/popular`
+
+Tokens ranked by transfer count or volume over a rolling window.
+
+| Param     | Type   | Description |
+| --------- | ------ | ----------- |
+| `network` | string | `testnet` or `mainnet` (see above) |
+| `window`  | string | `1h`, `24h` or `7d` (default `24h`) |
+| `by`      | string | `transfers` or `volume` (default `transfers`) |
+| `limit`   | int    | Page size, 1–100 (default 20) |
+| `offset`  | int    | Pagination offset (default 0) |
+
+```bash
+curl "http://localhost:3000/assets/popular?window=7d&by=volume&limit=10"
+```
+
+```json
+{
+  "window": "7d",
+  "by": "volume",
+  "limit": 10,
+  "offset": 0,
+  "total": 1,
+  "assets": [
+    { "contractId": "<C-address>", "transferCount": 42, "volume": "10000000000", "displayVolume": "1000.0000000" }
+  ]
+}
+```
+
+***
+
+### `GET /nfts/transfers`
+
+CAP-46 NFT transfer events. `includeTotal` behaves as it does on the fungible
+transfer routes: it is off by default and costs a full COUNT when asked for.
+
+| Param          | Type   | Description |
+| -------------- | ------ | ----------- |
+| `network`      | string | `testnet` or `mainnet` (see above) |
+| `contract`     | string | Filter to a specific NFT contract (`C...`) |
+| `token_id`     | string | Filter to a specific token identifier |
+| `address`      | string | Filter to transfers where the sender or recipient is this address |
+| `fromLedger`   | int    | Inclusive lower ledger bound |
+| `toLedger`     | int    | Inclusive upper ledger bound |
+| `limit`        | int    | Page size, 1–200 (default 50) |
+| `offset`       | int    | Pagination offset (default 0) |
+| `cursor`       | string | Opaque pagination cursor; continue from `nextCursor` |
+| `includeTotal` | bool   | Also return an exact `total` (runs a COUNT) |
+| `$filter`      | string | OData filter expression |
+| `$select`      | string | Comma-separated field list to return |
+
+```bash
+curl "http://localhost:3000/nfts/transfers?contract=<C-address>&limit=10"
+```
+
+```json
+{
+  "hasMore": false,
+  "limit": 10,
+  "offset": 0,
+  "transfers": [
+    {
+      "id": 1,
+      "contractId": "<C-address>",
+      "tokenId": "<token-id>",
+      "fromAddress": "<G-address>",
+      "toAddress": "<G-address>",
+      "ledger": 5842100,
+      "ledgerClosedAt": "2025-01-01T00:00:00.000Z",
+      "txHash": "<tx-hash>",
+      "eventId": "5842100-1",
+      "createdAt": "2025-01-01T00:00:01.000Z"
+    }
+  ]
+}
+```
+
+***
+
+### `GET /nfts/owners/:contract/:token_id`
+
+The current owner of an NFT — the `toAddress` of its most recent indexed
+transfer — plus any cached metadata for the token. Answers `404` when no
+transfer for that contract and token has been indexed, so an ownerless token is
+not mistaken for one whose owner is the zero address.
+
+| Param      | Type   | Description |
+| ---------- | ------ | ----------- |
+| `contract` | path   | NFT contract address (`C...`) |
+| `token_id` | path   | Token identifier |
+| `network`  | string | `testnet` or `mainnet` (see above) |
+
+```bash
+curl "http://localhost:3000/nfts/owners/<C-address>/<token-id>"
+```
+
+```json
+{
+  "contract": "<C-address>",
+  "token_id": "<token-id>",
+  "owner": "<G-address>",
+  "metadata": { "name": "Example NFT", "tokenUri": "https://example.com/metadata/1.json" }
+}
+```
+
+***
+
+### `GET /host-fn/:contractId`
+
+Raw host-function invocation logs for a contract. Every contract event the
+indexer sees is stored here, not only SEP-41 token events, so an arbitrary
+contract's calls can be read without a custom decoder.
+
+| Param          | Type   | Description |
+| -------------- | ------ | ----------- |
+| `contractId`   | path   | Contract address (`C...`) |
+| `network`      | string | `testnet` or `mainnet` (see above) |
+| `functionName` | string | Filter by function name, e.g. `swap` |
+| `limit`        | int    | Page size, 1–200 (default 50) |
+| `offset`       | int    | Pagination offset (default 0) |
+
+```bash
+curl "http://localhost:3000/host-fn/<C-address>?functionName=swap&limit=20"
+```
+
+```json
+{
+  "contractId": "<C-address>",
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "logs": [
+    {
+      "contractId": "<C-address>",
+      "functionName": "swap",
+      "args": { "amount_in": "1000000000" },
+      "result": { "amount_out": "990000000" },
+      "gasUsed": "120000",
+      "ledger": 5842100,
+      "ledgerClosedAt": "2025-01-01T00:00:00.000Z",
+      "txHash": "<tx-hash>",
+      "eventId": "5842100-1"
+    }
+  ]
+}
+```
+
+***
+
+### Webhook subscriptions
+
+`POST /webhooks` creates a subscription. `secret` is used to sign deliveries
+with HMAC-SHA256; the response explains the `X-Wraith-Signature` format, and
+`GET` never returns the secret. `GET /webhooks` lists every subscription.
+`DELETE /webhooks/:id` removes one and cascades its delivery history.
+`GET /webhooks/:id/deliveries` reads the delivery log.
+
+**`POST /webhooks` body**
+
+| Field    | Type   | Description |
+| -------- | ------ | ----------- |
+| `url`    | string | Receiver URL; must start with `http://` or `https://` |
+| `secret` | string | Shared secret for the HMAC-SHA256 signature |
+| `filter` | object | Optional: `contract`, `from`, `to`, `min_amount` |
+| `active` | bool   | Optional; defaults to `true` |
+
+**`GET /webhooks/:id/deliveries` query**
+
+| Param    | Type   | Description |
+| -------- | ------ | ----------- |
+| `status` | string | `pending`, `success` or `failed` |
+| `limit`  | int    | Page size, 1–200 (default 50) |
+| `offset` | int    | Pagination offset (default 0) |
+
+```bash
+# create
+curl -X POST http://localhost:3000/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/hook","secret":"<webhook-secret>","filter":{"contract":"<C-address>"}}'
+
+# list, delete, and read the delivery log
+curl http://localhost:3000/webhooks
+curl -X DELETE http://localhost:3000/webhooks/<webhook-id>
+curl "http://localhost:3000/webhooks/<webhook-id>/deliveries?status=failed&limit=20"
+```
+
+```json
+{
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "deliveries": [
+    {
+      "id": 1,
+      "eventId": "5842100-1",
+      "status": "failed",
+      "attempts": 3,
+      "lastStatusCode": 500,
+      "lastError": "receiver returned 500",
+      "nextRetryAt": null,
+      "deliveredAt": null,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+***
+
+### Naira rail lookups
+
+Both routes require the deployment's provider key and are mainnet only. They
+read; neither creates an order.
+
+`GET /ngn/customers/status` answers whether a customer reference is verified.
+It takes `customerRef` (required) and is rate-limited, because an unthrottled
+answer would be an oracle for whether a reference exists. The response carries
+`customerRef`, `verified`, and `status` when the provider supplies one.
+
+```bash
+curl "http://localhost:3000/ngn/customers/status?customerRef=<customer-ref>"
+```
+
+`GET /ngn/bills/data-bundles` returns the read-only data-bundle catalogue,
+optionally filtered by `provider`. It is cached for five minutes.
+
+| Param      | Type   | Description |
+| ---------- | ------ | ----------- |
+| `provider` | string | Optional; e.g. `MTN`, `AIRTEL`, `GLO` |
+
+```bash
+curl "http://localhost:3000/ngn/bills/data-bundles?provider=MTN"
+```
+
+```json
+{
+  "bundles": [
+    { "provider": "MTN", "code": "mtn-1gb-30d", "label": "1 GB / 30 days", "megabytes": 1024, "validityDays": 30, "amountNgn": 500 }
+  ]
+}
+```
+
+> The fee routes (`GET /fees`) are deliberately not described in this section;
+> issue #417 covers their documentation.
 
 ***
 
@@ -759,6 +1226,7 @@ run docs:openapi` (and the deployment's network settings).
 | -------------------------- | ------------- | --------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`             | —             | Postgres connection string (required)                                                         |
 | `DIRECT_DATABASE_URL`      | —             | Direct (non-pooled) Postgres URL — required for Prisma migrations on Supabase                 |
+| `DATABASE_REPLICAS`        | *(empty)*     | Optional comma-separated Postgres URLs for read replicas.                                     |
 | `STELLAR_NETWORK`          | —             | `testnet` or `mainnet`. Default single-network mode.                                          |
 | `SOROBAN_RPC_URL_TESTNET`  | `https://soroban-testnet.stellar.org` | Explicit Soroban RPC endpoint for testnet. |
 | `SOROBAN_RPC_URL_MAINNET`  | —             | Explicit Soroban RPC endpoint for mainnet. Required to index mainnet in multi-network setups. |
@@ -772,6 +1240,7 @@ run docs:openapi` (and the deployment's network settings).
 | `CONTRACT_IDS`             | *(all)*       | Comma-separated token contract IDs to watch. Empty = watch all (very heavy on mainnet)        |
 | `EVENTS_BATCH_SIZE`        | `10000`       | Max events per RPC call (Stellar RPC hard-cap is 10 000)                                      |
 | `RETENTION_DAYS`           | `30`          | Delete transfers older than N days (keeps DB within free-tier limits)                         |
+| `BACKFILL_BATCH_SIZE`      | `5000`        | Rows per keyset page when running `npm run backfill:summaries`                                |
 | `NETWORKS`                 | *(`STELLAR_NETWORK`)* | Comma-separated networks to index in one process, e.g. `testnet,mainnet`. Also the set the API's `?network=` selector accepts. |
 | `PORT`                     | `3000`        | REST API port                                                                                 |
 | `CORS_ALLOWED_ORIGINS`    | *(empty)*     | Comma-separated origins allowed to call the restricted surfaces (offramp orders, naira rails, webhook subscriptions, `/metrics`, and any unclassified write). Empty = no browser origin may call them; requests with no `Origin` header are always served. See [CORS](#cors). |
@@ -801,6 +1270,43 @@ If `HORIZON_URL` is set, the indexer checks the RPC source first and switches to
 | Futurenet (public) | `https://rpc-futurenet.stellar.org`                       |
 
 > **Important:** Stellar RPC retains \~7 days of event history. For longer historical coverage, use [Galexie](https://developers.stellar.org/docs/data/indexers) + the [Token Transfer Processor](https://developers.stellar.org/docs/data/indexers/build-your-own/processors/token-transfer-processor).
+
+### Database Read Replicas
+
+Wraith supports distributing database read load across read replicas configured via `DATABASE_REPLICAS` (a comma-separated list of Postgres connection URLs).
+
+#### What Replicas Are Used For
+Replicas offload high-volume read traffic from the primary database for append-only, high-throughput indexed data where slight replication lag (eventual consistency) is acceptable:
+- **Token Transfers** (`TokenTransfer`)
+- **NFT Transfers** (`NftTransfer`)
+- **Host Function Logs** (`HostFnLog`)
+- **LP-Share Transfers** (`LpShareTransfer`)
+- **Account Summaries** (`AccountSummary`)
+
+#### What Replicas Are NEVER Used For
+Any table requiring read-after-write consistency or transactional integrity **never** routes reads to a replica; these queries always execute directly on the primary:
+- **Order Processing & Balances:** `OfframpOrder`, `NgnOrder`, `FeePolicy`, `FeeQuote`, `MoneyFailure` (ensures order creation, deduplication, and retry lookups immediately observe recent writes).
+- **Indexer State & Cursors:** `IndexerState`, `IndexerCheckpoint`, `RetentionJobRun`, `ContractTombstone`, `BackfillCursor` (prevents indexer startup loops from re-processing finished ledgers due to stale cursor reads).
+- **Metadata Caches:** `TokenMetadata`, `NftMetadata` (prevents redundant RPC fetches and cache thrashing following an initial cache miss write).
+- **Webhooks:** `WebhookSubscription`, `WebhookDelivery`.
+- **Discord Authentication & Proofs:** `DiscordMember`, `DiscordLinkCode`, `DiscordGithubRequest`.
+- **Raw SQL Queries (`$queryRaw`, `$executeRaw`) & Interactive Transactions (`$transaction`):** Always bypass replicas and execute on the primary.
+
+#### Forcing the Primary for a Read
+Callers can force a read to execute on the primary database for a specific operation:
+1. **Via `prisma.$primary`:** `await prisma.$primary.tokenTransfer.findMany(...)`
+2. **Via `withPrimary`:** `await withPrimary(async () => prisma.tokenTransfer.findMany(...))`
+3. **Via query args:** `await prisma.tokenTransfer.findMany({ where: { ... }, forcePrimary: true })`
+
+#### Health Checks and Failover
+- Replicas are probed every 10 seconds (or configured interval) using `SELECT 1`.
+- When a read on a replica fails with a **connection or infrastructure error**, that replica is immediately marked unhealthy and skipped on subsequent queries without waiting for the health check timer. The query transparently falls back to the primary.
+- Errors that are the **query's own fault** (e.g. invalid arguments, validation errors, schema constraint violations) do **not** trigger primary fallback and do not mark the replica unhealthy.
+
+#### Metrics
+Read routing and failovers are tracked in Prometheus metrics:
+- `db_reads_total{target="primary|replica"}`: Read queries executed against the primary vs. replicas.
+- `db_read_fallbacks_total`: Total number of queries that fell back from a replica to the primary after a connection error.
 
 ***
 
@@ -887,7 +1393,7 @@ curl -H "Accept: application/vnd.api+json" http://localhost:3000/summary/GABC123
 | `GET /transfers/tx/:txHash` | `transfer` |
 | `GET /summary/:address` | `token-summary` |
 | `GET /accounts/:address/summary` | `account-summary` |
-| `GET /accounts/:address/balance` | `account-balance` |
+| `GET /accounts/:address/balance` | `account-summary` |
 | `GET /accounts/:address/transfers` | `transfer` |
 | `GET /assets/popular` | `popular-asset` |
 | `GET /nfts/transfers` | `nft-transfer` |
@@ -896,24 +1402,35 @@ curl -H "Accept: application/vnd.api+json" http://localhost:3000/summary/GABC123
 | `GET /healthz` | `health` |
 | `GET /readyz` | `readiness` |
 
+`GET /accounts/:address/balance` is transformed as a single `account-summary`
+resource, even though its body is a balance list rather than a summary. That is
+what `determineResourceType` in `src/middleware/jsonapi.ts` does today: it
+matches any path containing `/accounts/` as `account-summary`, and the balance
+body has no top-level `id` or `contractId`, so the JSON:API resource `id` is an
+empty string. Open issue #397 tracks the mismatch; this section documents the
+current behaviour rather than changing it.
+
 `GET /metrics` is not a JSON:API resource — it serves Prometheus text format.
 
-The routes below are live but outside the JSON:API surface — no resource
-type, no `data` envelope:
+The routes below are live but have no dedicated JSON:API resource type (the
+transform falls back to `generic` for bodies that are JSON, and the download
+routes do not go through it at all):
 
 | Endpoint | Notes |
 |----------|-------|
 | `GET /tokens` | Cached token metadata for the selected network |
 | `GET /transfers.csv` | Full-set CSV export (no pagination) |
 | `GET /transfers.parquet` | Full-set Parquet export (no pagination) |
-| `GET /accounts/:address/balance` | Derived balances, not on-chain reads |
 
-Internal routes — not part of the public data API, and marked `deprecated: true`
-with a rationale in `openapi.json`:
+Internal routes — not part of the public data API, and marked `x-internal: true`
+with a rationale in `openapi.json`. They are deliberately **not** `deprecated`:
+that flag tells generators and readers the endpoint is being withdrawn, and
+these routes are live and called by the wallet today.
 
 | Endpoint | Notes |
 |----------|-------|
 | `POST /webhooks/linq` | Signature-verified payout provider callback |
+| `GET /offramp/availability` | Wallet-only cash-out availability gate (no provider call) |
 | `GET /offramp/rate` | Wallet-only cash-out surface (server-side provider API) |
 | `POST /offramp/verify-bank` | Wallet-only cash-out surface (server-side provider API) |
 | `GET /offramp/trustline` | Wallet-only cash-out surface (server-side provider API) |

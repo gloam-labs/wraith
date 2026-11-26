@@ -2,6 +2,11 @@ import { EventEmitter } from "events";
 import type { TransferRecord } from "./db";
 import type { HostFnRecord } from "./indexer/host-fn-log";
 import type { Network } from "./network";
+import {
+  isSubscriptionChannel,
+  recordSubscriptionEventDropped,
+  type SubscriptionChannel,
+} from "./metrics";
 
 // Singleton emitter for real-time transfer notifications.
 // setMaxListeners(0) removes the default 10-listener cap — one listener per
@@ -35,18 +40,46 @@ export function emitHostFnLog(log: HostFnRecord, network: Network): void {
 }
 
 /**
+ * The drop-counter channel for each event this module emits. Used only when a
+ * caller does not name a channel itself. A Map, not an object literal, so an
+ * event name such as "constructor" cannot resolve to an inherited property.
+ */
+const CHANNEL_BY_EVENT_NAME: ReadonlyMap<string, SubscriptionChannel> = new Map([
+  ["transfer:new", "transfer"],
+  ["hostfnlog:new", "hostfnlog"],
+]);
+
+export interface EventsToAsyncIteratorOptions {
+  /** Most unread events held for this subscriber before the oldest is dropped. Default 100. */
+  maxQueue?: number;
+  /**
+   * Label for `subscription_events_dropped_total`. When omitted (or not one of
+   * SUBSCRIPTION_CHANNELS), it falls back to the channel of `eventName` if that
+   * is one of the two events above; otherwise drops still happen but are not
+   * counted, because the label may only take the fixed values.
+   */
+  channel?: SubscriptionChannel;
+}
+
+/**
  * Turn an EventEmitter channel into a pull-based AsyncIterableIterator, the
  * shape GraphQL subscription resolvers require.
  *
  * Bounds memory for a slow consumer: once more than `maxQueue` events have
  * piled up waiting to be pulled, the oldest queued event is dropped so a
- * stalled subscriber can never grow the queue unboundedly.
+ * stalled subscriber can never grow the queue unboundedly. Every drop is
+ * counted in `subscription_events_dropped_total{channel}` (#453).
  */
 export function eventsToAsyncIterator<T>(
   emitter: EventEmitter,
   eventName: string,
-  maxQueue = 100
+  options: EventsToAsyncIteratorOptions = {}
 ): AsyncIterableIterator<T> {
+  const maxQueue = options.maxQueue ?? 100;
+  const channel: SubscriptionChannel | undefined = isSubscriptionChannel(options.channel)
+    ? options.channel
+    : CHANNEL_BY_EVENT_NAME.get(eventName);
+
   const pullQueue: Array<(result: IteratorResult<T>) => void> = [];
   const pushQueue: T[] = [];
   let listening = true;
@@ -61,6 +94,7 @@ export function eventsToAsyncIterator<T>(
     pushQueue.push(value);
     if (pushQueue.length > maxQueue) {
       pushQueue.shift();
+      if (channel) recordSubscriptionEventDropped(channel);
     }
   };
 
@@ -77,6 +111,12 @@ export function eventsToAsyncIterator<T>(
 
   const iterator: AsyncIterableIterator<T> = {
     next(): Promise<IteratorResult<T>> {
+      // Values already queued are still handed out after return() or throw():
+      // stop() detaches the listener and ends waiting pulls, but does not
+      // discard what was received before it. Only once the queue is empty does
+      // next() report done. A consumer that called return() normally stops
+      // pulling, and the WebSocket loop in src/graphql/subscriptions.ts breaks
+      // out once its subscription is gone; src/__tests__/events.test.ts pins it.
       if (pushQueue.length > 0) {
         return Promise.resolve({ value: pushQueue.shift()!, done: false });
       }
@@ -105,6 +145,11 @@ export function eventsToAsyncIterator<T>(
  * Wrap an async iterator so only values matching `predicate` are yielded,
  * used to apply subscription arguments (e.g. contractId) without adding a
  * dedicated listener per filter combination.
+ *
+ * `next()` keeps pulling until a value matches, so on a stream where nothing
+ * matches it does not resolve until the inner iterator ends. That is expected:
+ * return() (or throw()) is forwarded to the inner iterator, which ends the
+ * waiting pull with `done`.
  */
 export function filterAsyncIterator<T>(
   iterator: AsyncIterableIterator<T>,

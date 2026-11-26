@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "jest --watch",
     "test:chaos": "jest --runInBand --testPathPatterns=tests/chaos --testTimeout=300000 --config=jest.chaos.config.js",
@@ -53,15 +54,19 @@
       "json"
     ],
     "clearMocks": true,
-    "collectCoverage": true,
     "coverageThreshold": {
       "global": {
-        "lines": 55,
-        "functions": 50,
-        "branches": 38,
-        "statements": 55
+        "lines": 80,
+        "functions": 77,
+        "branches": 68,
+        "statements": 78
       }
-    }
+    },
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/**/__tests__/**",
+      "!src/schema.d.ts"
+    ]
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",

@@ -901,10 +901,39 @@ export const opsFailuresQuerySchema = z.object({
     max: 200,
     description: "Page size. Defaults to 50 and is capped at 200; this is a page, not an export.",
   }),
+  before: optionalQueryInt({
+    min: 1,
+    description:
+      "Only failures older than this id (exclusive). Pass nextBefore from a previous page to walk backwards.",
+  }).openapi({ example: 42 }),
+  network: z.preprocess(
+    (value) => {
+      const raw = firstValue(value);
+      if (raw === undefined || raw === null || raw === "") return undefined;
+      if (typeof raw !== "string") return raw;
+      return raw.trim().toLowerCase();
+    },
+    z
+      .enum(["testnet", "mainnet"])
+      .optional()
+      .openapi({
+        description:
+          "Network to read from. When omitted, failures from all networks are returned. " +
+          "May also be sent as the X-Network header; the query parameter wins.",
+        example: "testnet",
+      })
+  ),
+  since: optionalQueryDateTime(
+    "Only failures recorded at or after this timestamp (ISO 8601).",
+  ).openapi({ example: "2026-01-01T00:00:00.000Z" }),
 });
 
 /** One money-affecting failure, as an operator reads it. */
 const moneyFailureSchema = z.object({
+  id: z.number().int().openapi({
+    description: "Failure record id.",
+    example: 42,
+  }),
   network: z.string().openapi({ example: "testnet" }),
   rail: z.string().openapi({
     description: "Which rail failed: offramp, onramp, bill, or unknown.",
@@ -942,6 +971,10 @@ const moneyFailureSchema = z.object({
 export const opsFailuresResponseSchema = z.object({
   failures: z.array(moneyFailureSchema).openapi({ description: "Recent failures, newest first." }),
   limit: z.number().int().openapi({ description: "The page size actually applied, after capping." }),
+  nextBefore: z.number().int().nullable().openapi({
+    description: "The id to pass as before on the next call, or null on the last page.",
+    example: 42,
+  }),
 });
 
 export const ngnCustomerStatusQuerySchema = z.object({

@@ -10,6 +10,7 @@ import { toDisplayAmount } from "./amount";
 // indexer loop (#161) and the API selector (#163) pass it explicitly.
 
 export { toDisplayAmount } from "./amount";
+export { withReadReplicas, withPrimary, disconnectReplicas } from "./db/router";
 
 import { withReadReplicas } from "./db/router";
 import { observeDbQuery } from "./metrics";

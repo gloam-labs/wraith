@@ -132,7 +132,7 @@ describe("parseEvents", () => {
 
   it("skips a malformed event instead of failing the batch", () => {
     expect(() => parseEvent(malformed)).toThrow();
-    const records = parseEvents([good("0000000000000000001-00001"), malformed, good("0000000000000000001-00003")]);
+    const records = parseEvents([good("0000000000000000001-00001"), malformed, good("0000000000000000001-00003")], "testnet");
     expect(records).toHaveLength(2);
   });
 });

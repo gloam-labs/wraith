@@ -466,10 +466,11 @@ registry.registerPath({
     "records of money-affecting failures — a rejected payout, an order that ended " +
     "failed after the user paid, a webhook reconciliation that gave up — so an " +
     "operator can answer \"what broke today\" without a log search or database " +
-    "access. Ordinary validation errors are never recorded here. Requires " +
-    "`Authorization: Bearer <OPS_TOKEN>`; answers 503 when the deployment has no " +
-    "token configured, and 401 for a missing or wrong one. Rows name the rail, the " +
-    "order and what failed, and never carry a NIN.",
+    "access. Ordinary validation errors are never recorded here. Supports cursor " +
+    "pagination via `before` (passing `nextBefore` from the previous page) and " +
+    "filtering by `network`. Requires `Authorization: Bearer <OPS_TOKEN>`; answers " +
+    "503 when the deployment has no token configured, and 401 for a missing or " +
+    "wrong one. Rows name the rail, the order and what failed, and never carry a NIN.",
   "x-internal": true,
   request: { query: opsFailuresQuerySchema },
   responses: {

@@ -2548,7 +2548,7 @@ export interface paths {
         };
         /**
          * Recent money-affecting failures (operator view)
-         * @description Internal operator endpoint, not part of the public data API. Lists the durable records of money-affecting failures — a rejected payout, an order that ended failed after the user paid, a webhook reconciliation that gave up — so an operator can answer "what broke today" without a log search or database access. Ordinary validation errors are never recorded here. Requires `Authorization: Bearer <OPS_TOKEN>`; answers 503 when the deployment has no token configured, and 401 for a missing or wrong one. Rows name the rail, the order and what failed, and never carry a NIN.
+         * @description Internal operator endpoint, not part of the public data API. Lists the durable records of money-affecting failures — a rejected payout, an order that ended failed after the user paid, a webhook reconciliation that gave up — so an operator can answer "what broke today" without a log search or database access. Ordinary validation errors are never recorded here. Supports cursor pagination via `before` (passing `nextBefore` from the previous page) and filtering by `network`. Requires `Authorization: Bearer <OPS_TOKEN>`; answers 503 when the deployment has no token configured, and 401 for a missing or wrong one. Rows name the rail, the order and what failed, and never carry a NIN.
          */
         get: {
             parameters: {
@@ -2559,6 +2559,12 @@ export interface paths {
                     kind?: string | null;
                     /** @description Page size. Defaults to 50 and is capped at 200; this is a page, not an export. */
                     limit?: number | null;
+                    /** @description Only failures older than this id (exclusive). Pass nextBefore from a previous page to walk backwards. */
+                    before?: number | null;
+                    /** @description Network to read from. When omitted, failures from all networks are returned. May also be sent as the X-Network header; the query parameter wins. */
+                    network?: "testnet" | "mainnet" | null;
+                    /** @description Only failures recorded at or after this timestamp (ISO 8601). */
+                    since?: string | null;
                 };
                 header?: never;
                 path?: never;
@@ -2575,6 +2581,11 @@ export interface paths {
                         "application/json": {
                             /** @description Recent failures, newest first. */
                             failures: {
+                                /**
+                                 * @description Failure record id.
+                                 * @example 42
+                                 */
+                                id: number;
                                 /** @example testnet */
                                 network: string;
                                 /**
@@ -2604,6 +2615,11 @@ export interface paths {
                             }[];
                             /** @description The page size actually applied, after capping. */
                             limit: number;
+                            /**
+                             * @description The id to pass as before on the next call, or null on the last page.
+                             * @example 42
+                             */
+                            nextBefore: number | null;
                         };
                     };
                 };

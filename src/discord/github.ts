@@ -12,17 +12,56 @@
  * access to anything of the member's.
  */
 
+import { Counter } from "prom-client";
+import { registry } from "../metrics";
 import { githubClientId, githubRepos, githubToken } from "./config";
 
 const TIMEOUT_MS = 10_000;
+/** The daily check should never hold a Discord interaction for minutes. */
+const SEARCH_MAX_WAIT_MS = 20_000;
+/** Refresh is pressed often; a short count cache keeps those reads cheap. */
+const COUNT_CACHE_TTL_MS = 10 * 60 * 1000;
+const CHECKS_METRIC = "veil_discord_github_checks_total";
 
-async function request(url: string, init: RequestInit): Promise<{ status: number; body: Record<string, unknown> | null }> {
+/** Only `get` is used, so a mocked Response needs no full Headers object. */
+interface ResponseHeaders {
+  get(name: string): string | null;
+}
+
+interface GithubResponse {
+  status: number;
+  body: Record<string, unknown> | null;
+  headers: ResponseHeaders;
+}
+
+function headersOf(value: unknown): ResponseHeaders {
+  const candidate = value as { get?: unknown } | null;
+  if (candidate && typeof candidate.get === "function") return value as ResponseHeaders;
+  return { get: () => null };
+}
+
+/**
+ * Daily checks by final outcome. The label is a fixed three-word vocabulary;
+ * no login, URL or token can reach it.
+ */
+const checksTotal = new Counter({
+  name: CHECKS_METRIC,
+  help: "Daily Discord GitHub contribution checks by outcome",
+  labelNames: ["outcome"] as const,
+  registers: [registry],
+});
+
+function recordCheck(outcome: "ok" | "rate_limited" | "error"): void {
+  checksTotal.inc({ outcome });
+}
+
+async function request(url: string, init: RequestInit): Promise<GithubResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    return { status: response.status, body };
+    return { status: response.status, body, headers: headersOf(response.headers) };
   } finally {
     clearTimeout(timer);
   }
@@ -102,25 +141,159 @@ function isLogin(value: string): boolean {
   return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(value);
 }
 
+interface SearchLimit {
+  remaining: number | null;
+  resetAt: number | null;
+}
+
+interface CachedCount {
+  count: number;
+  expiresAt: number;
+}
+
+let searchLimit: SearchLimit = { remaining: null, resetAt: null };
+const countCache = new Map<string, CachedCount>();
+/** One search at a time: a refresh burst must not spend the same last call twice. */
+let queue: Promise<void> = Promise.resolve();
+
+function withLock<T>(work: () => Promise<T>): Promise<T> {
+  const result = queue.then(work, work);
+  queue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+function numberHeader(headers: ResponseHeaders, name: string): number | null {
+  const raw = headers.get(name);
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function retryAfterMs(headers: ResponseHeaders): number | null {
+  const raw = headers.get("retry-after");
+  if (!raw) return null;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const date = Date.parse(raw);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+}
+
+function noteSearchLimit(headers: ResponseHeaders): void {
+  const remaining = numberHeader(headers, "x-ratelimit-remaining");
+  const reset = numberHeader(headers, "x-ratelimit-reset");
+  searchLimit = {
+    remaining: remaining === null ? null : Math.max(0, Math.floor(remaining)),
+    resetAt: reset === null ? null : reset * 1000,
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** True only when the wait fits the daily check's budget. */
+async function waitAtMost(ms: number): Promise<boolean> {
+  if (ms <= 0) return true;
+  if (ms > SEARCH_MAX_WAIT_MS) return false;
+  await sleep(ms);
+  return true;
+}
+
+function cacheKey(login: string): string {
+  return login.toLowerCase();
+}
+
+function cachedCount(login: string, now: number): number | null {
+  const key = cacheKey(login);
+  const hit = countCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= now) {
+    countCache.delete(key);
+    return null;
+  }
+  return hit.count;
+}
+
+function rememberCount(login: string, count: number, now: number): void {
+  countCache.set(cacheKey(login), { count, expiresAt: now + COUNT_CACHE_TTL_MS });
+}
+
+function readCount(response: GithubResponse): number | null {
+  const total = response.body?.total_count;
+  return response.status === 200 && typeof total === "number" ? total : null;
+}
+
 /**
  * Merged pull requests by this account across Veil's repositories.
  * Null when GitHub could not be asked, which keeps the member's role as it is.
  */
 export async function mergedPullRequestCount(login: string): Promise<number | null> {
   if (!isLogin(login)) return null;
-  const repos = githubRepos().map((repo) => `repo:${repo}`).join(" ");
-  const query = encodeURIComponent(`is:pr is:merged author:${login} ${repos}`);
-  const token = githubToken();
-  try {
-    const { status, body } = await request(`https://api.github.com/search/issues?q=${query}&per_page=1`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    const total = body?.total_count;
-    return status === 200 && typeof total === "number" ? total : null;
-  } catch {
-    return null;
-  }
+  return withLock(async () => {
+    const now = Date.now();
+    const hit = cachedCount(login, now);
+    if (hit !== null) return hit;
+
+    if (searchLimit.remaining === 0) {
+      if (searchLimit.resetAt === null || !(await waitAtMost(searchLimit.resetAt - now))) {
+        recordCheck("rate_limited");
+        return null;
+      }
+    }
+
+    const repos = githubRepos().map((repo) => `repo:${repo}`).join(" ");
+    const query = encodeURIComponent(`is:pr is:merged author:${login} ${repos}`);
+    const token = githubToken();
+    const url = `https://api.github.com/search/issues?q=${query}&per_page=1`;
+    const headers = {
+      Accept: "application/vnd.github+json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    try {
+      const first = await request(url, { headers });
+      noteSearchLimit(first.headers);
+      if (first.status === 403 || first.status === 429) {
+        const resetWait = searchLimit.resetAt === null ? null : searchLimit.resetAt - Date.now();
+        const wait = retryAfterMs(first.headers) ?? resetWait;
+        if (wait === null || !(await waitAtMost(wait))) {
+          recordCheck("rate_limited");
+          return null;
+        }
+        const retry = await request(url, { headers });
+        noteSearchLimit(retry.headers);
+        if (retry.status === 403 || retry.status === 429) {
+          recordCheck("rate_limited");
+          return null;
+        }
+        const retryCount = readCount(retry);
+        if (retryCount === null) {
+          recordCheck("error");
+          return null;
+        }
+        rememberCount(login, retryCount, Date.now());
+        recordCheck("ok");
+        return retryCount;
+      }
+
+      const count = readCount(first);
+      if (count === null) {
+        recordCheck("error");
+        return null;
+      }
+      rememberCount(login, count, Date.now());
+      recordCheck("ok");
+      return count;
+    } catch {
+      recordCheck("error");
+      return null;
+    }
+  });
+}
+
+/** Test-only: clears the rate-limit note, the count cache and the call queue. */
+export function _resetGithubChecks(): void {
+  searchLimit = { remaining: null, resetAt: null };
+  countCache.clear();
+  queue = Promise.resolve();
 }

@@ -136,6 +136,11 @@ const subscriptionTypeDefs = `#graphql
     ledgerClosedAt: String!
     txHash: String!
     eventId: String!
+    network: Network!
+  }
+
+  extend type Transfer {
+    network: Network!
   }
 
   type Subscription {
@@ -158,6 +163,7 @@ function subscriptionNetwork(arg: string | undefined, ctx: GraphQLContext | unde
 function formatHostFnLog(log: HostFnLogEvent) {
   return {
     ...log,
+    network: log.network.toUpperCase(),
     ledgerClosedAt:
       log.ledgerClosedAt instanceof Date
         ? log.ledgerClosedAt.toISOString()
@@ -212,7 +218,7 @@ function buildSubscriptionSchema(): GraphQLSchema {
           // by network or a subscriber gets the other chain's rows (#163).
           const net = subscriptionNetwork(args.network, ctx);
           return filterAsyncIterator<TransferEvent>(
-            eventsToAsyncIterator<TransferEvent>(transferEmitter, "transfer:new"),
+            eventsToAsyncIterator<TransferEvent>(transferEmitter, "transfer:new", { channel: "transfer" }),
             (t) => t.network === net && (!args.contractId || t.contractId === args.contractId)
           );
         },
@@ -220,6 +226,7 @@ function buildSubscriptionSchema(): GraphQLSchema {
           const transfer = payload as TransferEvent;
           return {
             ...formatTransfer(transfer as unknown as Record<string, unknown>),
+            network: transfer.network.toUpperCase(),
             displayAmount: toDisplayAmount(
               transfer.amount,
               getCachedTokenDecimals(transfer.contractId, transfer.network),
@@ -231,7 +238,7 @@ function buildSubscriptionSchema(): GraphQLSchema {
         subscribe: (_parent, args: { contractId?: string; network?: string }, ctx) => {
           const net = subscriptionNetwork(args.network, ctx);
           return filterAsyncIterator<HostFnLogEvent>(
-            eventsToAsyncIterator<HostFnLogEvent>(hostFnLogEmitter, "hostfnlog:new"),
+            eventsToAsyncIterator<HostFnLogEvent>(hostFnLogEmitter, "hostfnlog:new", { channel: "hostfnlog" }),
             (l) => l.network === net && (!args.contractId || l.contractId === args.contractId)
           );
         },

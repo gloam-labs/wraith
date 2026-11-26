@@ -39,6 +39,8 @@ import { getAllCachedTokens, getCachedTokenDecimals } from "./tokenCache";
 import { toDisplayAmount } from "./amount";
 import { getDependencyStatus, dependencyStatusBoundMs } from "./dependencies";
 import { HttpError, newCorrelationId } from "./utils/errors";
+import { bodyParseFailure, loggableError } from "./utils/bodyError";
+import { getRoutePattern, indexRoutePatterns } from "./routePatterns";
 
 // ─── RPC Health Check Cache ───────────────────────────────────────────────
 // Keyed by network (#163): one cache entry would let a healthy testnet RPC
@@ -150,16 +152,12 @@ export function createApp(): express.Application {
   // storm or a flood of invalid ?network= values would be invisible in
   // http_requests_total — exactly the traffic you want a counter for.
   //
-  // The route label is `req.route?.path`, the Express route pattern, and never
+  // The route label is the full Express route pattern (e.g. /search, /offramp/rate,
+  // /accounts/:address/transfers) resolved from router mount patterns, and never
   // the raw URL: addresses and contract ids must not become label values.
-  // Do NOT "improve" this to `req.baseUrl + req.route.path`. `req.baseUrl` is
-  // the *matched* mount path, not the pattern, and `src/api/accounts.ts:29`
-  // mounts a router at "/:address/transfers" — so baseUrl reads
-  // "/accounts/GABC…/transfers" with the real address in it. One label value
-  // per address is unbounded cardinality and an unbounded memory leak in
-  // prom-client. The cost of the safe version is that endpoints whose routers
-  // declare "/" (e.g. /search, /webhooks) all report route="/"; that is a
-  // legibility loss, not a correctness or cardinality one.
+  // We record each router's mount pattern when mounted and index the full pattern
+  // per Route object at startup. We never read `req.baseUrl`, `req.originalUrl` or
+  // `req.path`, avoiding unbounded label cardinality and memory leaks in prom-client.
   //
   // `method` is bounded by the set Node's HTTP parser accepts and `status` by
   // the status codes we emit, so every label here has a fixed domain.
@@ -173,7 +171,7 @@ export function createApp(): express.Application {
     const start = process.hrtime.bigint();
 
     res.on("finish", () => {
-      const routePattern = req.route?.path ?? "unknown";
+      const routePattern = getRoutePattern(req.route);
       const durationSeconds = Number(process.hrtime.bigint() - start) / 1e9;
       const status = String(res.statusCode);
 
@@ -1168,8 +1166,20 @@ else {
     // handler used to answer `err.message` verbatim, which is how a Postgres
     // connection string reached callers through a raw driver error. The caller
     // gets a correlation id; the detail stays in the log.
+    // A body the parser could not read is the caller's mistake, not ours. Its
+    // error object carries the whole raw body, which can hold a national ID
+    // number or bank details, so only the failure type is logged.
+    const parseFailure = bodyParseFailure(err);
+    if (parseFailure) {
+      console.warn(`[api] Unreadable request body (${parseFailure.type})`);
+      return res
+        .status(parseFailure.status)
+        .json({ error: "The request body could not be read", code: "invalid_request" });
+    }
+
     const correlationId = newCorrelationId();
-    console.error(`[api] Unhandled error (${correlationId}):`, err);
+    // Never the raw error: libraries hang request data on their errors.
+    console.error(`[api] Unhandled error (${correlationId}):`, loggableError(err));
 
     return res.status(500).json({
       error: "Internal server error",
@@ -1177,6 +1187,8 @@ else {
       correlationId,
     });
   });
+
+  indexRoutePatterns(app);
 
   return app;
 }

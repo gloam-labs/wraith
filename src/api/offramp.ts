@@ -2,7 +2,6 @@ import { createHmac } from "crypto";
 import { Router, Request, Response, NextFunction } from "express";
 import rateLimit, { type RateLimitRequestHandler } from "express-rate-limit";
 import type { OfframpOrder } from "@prisma/client";
-import { z } from "zod";
 
 import { prisma } from "../db";
 import { requestNetwork } from "../middleware/network";
@@ -21,6 +20,8 @@ import {
 } from "../linq/client";
 import { isFailureStatus, recordMoneyFailure } from "../linq/moneyFailures";
 import { ngnPerCoin } from "./ngn";
+import { rejectContractAddress } from "./address";
+import { amountSchema } from "./amount";
 import { sendError, sendLinqError } from "./errors";
 import { type OnrampCoin } from "../linq/onramp";
 
@@ -69,16 +70,9 @@ function amountCeiling(envName: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-/**
- * An amount arrives as a JSON number or a decimal string. Anything else is
- * refused rather than coerced: `Number("abc")` is NaN, `Number(true)` is 1 and
- * `Number([5])` is 5, none of which is an amount somebody meant to send.
- */
-function amountSchema(max: number) {
-  return z
-    .union([z.number(), z.string().trim().regex(/^\d+(\.\d+)?$/)])
-    .transform(Number)
-    .pipe(z.number().positive().max(max));
+/** Content, not just type: an empty string is not a required field. */
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 /**
@@ -451,12 +445,12 @@ export function createOfframpRouter(
     } = req.body ?? {};
 
     if (
-      typeof bankAccount !== "string" ||
-      typeof bankCode !== "string" ||
-      typeof bankName !== "string" ||
-      typeof accountName !== "string" ||
-      typeof walletAddress !== "string" ||
-      typeof idempotencyKey !== "string"
+      !isNonBlankString(bankAccount) ||
+      !isNonBlankString(bankCode) ||
+      !isNonBlankString(bankName) ||
+      !isNonBlankString(accountName) ||
+      !isNonBlankString(walletAddress) ||
+      !isNonBlankString(idempotencyKey)
     ) {
       sendError(
         res,
@@ -465,6 +459,20 @@ export function createOfframpRouter(
         "bankAccount, bankCode, bankName, accountName, walletAddress and idempotencyKey are required",
       );
       return;
+    }
+
+    // The refund address is where the money comes back if the order fails after
+    // the user has paid. It is optional because older app builds may not send
+    // one, but when it is present it must be an address the provider can
+    // actually pay to — the same rule the bills route applies to its own
+    // refunds. Checked here, before the idempotency lookup and the provider,
+    // for the same reason: the cost of discovering it later is the user's.
+    if (refundAddress !== undefined) {
+      if (typeof refundAddress !== "string") {
+        sendError(res, 400, "invalid_request", "refundAddress must be a string");
+        return;
+      }
+      if (rejectContractAddress(res, refundAddress, "refundAddress")) return;
     }
 
     // Checked before the idempotency lookup and before anything reaches the
@@ -554,7 +562,7 @@ export function createOfframpRouter(
         bankCode,
         bankName,
         accountName,
-        ...(typeof refundAddress === "string" ? { refundAddress } : {}),
+        ...(refundAddress !== undefined ? { refundAddress } : {}),
         customerRef: walletAddress,
         idempotencyKey,
       });
