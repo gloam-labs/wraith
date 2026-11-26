@@ -288,6 +288,29 @@ both chains in a single round-trip:</p>
 }
 </code><button type="button">Copy</button></pre>
 
+<p><code>transfers</code> accepts the same filters as the REST transfer routes, with the
+same validation — <code>limit</code> must be 1–200, <code>fromLedger</code>/<code>toLedger</code> are inclusive
+ledger bounds, <code>fromDate</code>/<code>toDate</code> are ISO 8601 datetimes with an offset,
+<code>eventTypes</code> is a list of <code>transfer</code>, <code>mint</code>, <code>burn</code> or <code>clawback</code>
+(case-insensitive), and <code>token</code> filters to one token contract like
+<code>contractId</code> does. <code>Transfer</code> carries the <code>id</code> REST already returns, and
+<code>TokenSummary</code> carries <code>displayTotalReceived</code>, <code>displayTotalSent</code> and
+<code>displayNetFlow</code> — the raw totals scaled by the token's decimals, as
+<code>GET /summary/:address</code> computes them.</p>
+<pre><code class="graphql">{
+  transfers(address: "GABC…", limit: 2, eventTypes: ["transfer"], fromLedger: 1000) {
+    transfers { id eventId amount displayAmount }
+    nextCursor
+    hasMore
+  }
+}
+</code><button type="button">Copy</button></pre>
+
+<p>Page with the cursor, not the offset: pass the previous page's <code>nextCursor</code>
+back as <code>cursor</code> to continue. A malformed cursor is an error, not a silent
+first page — the list would otherwise restart from the top and loop forever.
+<code>cursor</code> and <code>offset</code> do not combine; when a cursor is given, the offset is
+ignored, exactly as on REST.</p>
 <p><strong>WebSockets</strong> take it on the upgrade URL — <code>ws://host/subscribe/GABC…?network=mainnet</code>
 — and the stream is filtered to that network. A socket opened with an invalid or
 un-enabled selector is closed with code <code>1008</code> and the reason, rather than left
