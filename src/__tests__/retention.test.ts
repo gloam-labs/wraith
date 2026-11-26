@@ -125,17 +125,17 @@ describe("Partition retention unit tests (#294)", () => {
 
       expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith('CREATE SCHEMA IF NOT EXISTS "wraith_archive"');
       expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
-        expect.stringContaining('ALTER TABLE IF EXISTS "token_transfers_202407" SET (toast.compress = \'pglz\')')
+        expect.stringContaining('ALTER TABLE "token_transfers_202407" SET (toast_tuple_target = 128)')
       );
       expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
-        expect.stringContaining('ALTER TABLE IF EXISTS "token_transfers_202401" SET SCHEMA "wraith_archive"')
+        expect.stringContaining('ALTER TABLE "token_transfers_202401" SET SCHEMA "wraith_archive"')
       );
       expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO "wraith"."RetentionJobRun"')
+        expect.stringContaining("'completed'")
       );
     });
 
-    it("continues and logs warning if an individual partition DDL throws", async () => {
+    it("continues, logs warning, and records partial_failure if an individual partition DDL throws", async () => {
       const mockPartitions = [
         { name: "token_transfers_202401", schema: "wraith", parentTable: "token_transfers", sizeBytes: 5000 },
         { name: "token_transfers_202402", schema: "wraith", parentTable: "token_transfers", sizeBytes: 4000 },
@@ -161,6 +161,9 @@ describe("Partition retention unit tests (#294)", () => {
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining("Failed to archive partition token_transfers_202401:"),
         expect.any(Error)
+      );
+      expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+        expect.stringContaining("'partial_failure'")
       );
 
       warnSpy.mockRestore();
