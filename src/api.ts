@@ -607,11 +607,10 @@ export function createApp(): express.Application {
           ...stats,
           networks: byNetwork,
           dependencies,
-    dependency_status_bound_ms: dependencyStatusBoundMs,
-    cache: cacheStatus(),
-  });
-} 
-else {
+          dependency_status_bound_ms: dependencyStatusBoundMs,
+          cache: cacheStatus(),
+        });
+      } else {
         res.setHeader("X-Data-Stale", "true");
         if (lastIndexedLedger !== null) {
           res.setHeader("X-As-Of-Ledger", String(lastIndexedLedger));
