@@ -239,62 +239,12 @@ npm run db:seed
 A complete, production-grade OpenAPI 3.0 specification is generated from the shared Zod schemas used by the API handlers.
 
 - **[openapi.json](./docs/openapi.json)**
-- **[Client coverage](./docs/client-coverage.md)** — which of the Go, react-query and Python clients reaches which route group, and which gaps are deliberate
 
 You can use this file to explore the API, generate client SDKs, or import it into tools like:
 
 - [Swagger UI](https://swagger.io/tools/swagger-ui/) or [Swagger Editor](https://editor.swagger.io/)
 - [Postman](https://www.postman.com/)
 - [Redoc](https://redocly.com/redoc/)
-
-### GraphQL API
-
-Wraith also serves a GraphQL endpoint at **`POST /graphql`**, for the
-transfer and summary queries described by the schema in
-`src/graphql/server.ts`.
-
-**Persisted queries in production.** When `NODE_ENV` is `production`, the
-endpoint runs *persisted queries only*: the client sends no query text,
-just the SHA-256 hash of the query as
-`extensions.persistedQuery.sha256Hash`, and the server runs the query that
-hash maps to in the allow-list. A request with no hash, or with a hash that
-is not in the allow-list, is refused. Outside production, plain query text
-is accepted and the allow-list is only consulted for hashed requests.
-
-The allow-list is a JSON object of hash to query string, read from
-`PERSISTED_QUERIES_PATH`, or from `persisted-queries.json` in the working
-directory when that is unset. A starter `persisted-queries.json` holding
-the `health` query is committed, so a default deployment can answer at
-least that. Two failure modes are logged rather than silent:
-
-- **Missing file in production** — one warning
-  (`graphql.persisted_queries.missing`) when the list is first loaded.
-  Until the file exists, every GraphQL query is refused.
-- **Broken file** — a file that exists but does not parse, or is not an
-  object of hash to query string, logs an error
-  (`graphql.persisted_queries.invalid`) naming the path — never the
-  contents — and is treated as an empty list.
-
-Neither failure crashes the process.
-
-**Adding a query.** Save the query text to a `.graphql` file and run:
-
-```bash
-npm run graphql:persist -- path/to/query.graphql
-```
-
-The script hashes each query the same way clients do, merges the new
-entries into the allow-list (existing entries are kept), and writes it
-back. Commit the updated `persisted-queries.json` with your change and
-redeploy; the list is loaded once, at first use.
-
-**Environment keys.**
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `PERSISTED_QUERIES_PATH` | `./persisted-queries.json` | Path of the persisted-query allow-list. |
-| `GRAPHQL_MAX_DEPTH` | `10` | Maximum query depth the endpoint will run. |
-| `GRAPHQL_MAX_COST` | `1000` | Maximum query complexity (cost) the endpoint will run. |
 
 ### TypeScript / Node.js Library Reference
 
@@ -644,16 +594,6 @@ name the Prometheus gauge is exported under. Both always carry the same value.
 `network` names which chain the top-level fields describe — it follows the
 selector. `networks` reports every running loop regardless of the selector, so a
 single response shows one chain falling behind while the other is healthy.
-
-`dependencies` reports passive observations from real provider calls (never
-live probes) within `dependency_status_bound_ms`. Observations are
-last-call-wins, so a subsequent healthy call clears a prior failure
-immediately. Plain `4xx` client rejections (such as `400`, `404`, `422`) keep
-the provider `healthy` (`railsUsable: true`), while `401`/`403` auth or access
-rejections and `5xx` / unreachable hosts (`error`), timeouts (`timeout`), and
-surfaced `429` rate limits (`rate_limited`) mark it `unavailable`
-(`railsUsable: false`) using only that bounded vocabulary — never provider
-messages, URLs, or order IDs.
 
 ***
 
