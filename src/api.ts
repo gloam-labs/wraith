@@ -134,13 +134,6 @@ const withDisplay = <T extends { amount: string; contractId?: string; displayAmo
     ),
 });
 
-function parseSelectQuery(value: unknown): string[] | undefined {
-  if (typeof value !== "string" || !value.trim()) return undefined;
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
-}
-
-const VALID_EVENT_TYPES = new Set(["transfer", "mint", "burn", "clawback"]);
-
 // ─── CSV utilities ─────────────────────────────────────────────────────────
 /**
  * Escape a value for CSV output.
@@ -363,45 +356,6 @@ export function createApp(): express.Application {
 
   // ─── Fuzzy search across accounts, assets, and contracts ──────────────────
   app.use("/search", cacheMiddleware({ ttlMs: SEARCH_CACHE_TTL_MS }), createSearchRouter());
-
-  // ─── Helpers ─────────────────────────────────────────────────────────────
-  const parseIntParam = (val: unknown, fallback: number): number => {
-    const n = parseInt(String(val), 10);
-    return isNaN(n) ? fallback : n;
-  };
-
-
-  /**
-   * Parse a comma-separated eventType param (e.g. "transfer,mint").
-   * Returns the array on success, sends a 400 and returns null on invalid values.
-   */
-  const parseEventTypes = (val: unknown, res: Response): string[] | null | undefined => {
-    if (val === undefined || val === "") return undefined;
-    const types = String(val).split(",").map((s) => s.trim()).filter(Boolean);
-    const invalid = types.filter((t) => !VALID_EVENT_TYPES.has(t));
-    if (invalid.length) {
-      res.status(400).json({
-        error: `Invalid eventType: "${invalid.join('", "')}". Valid values: transfer, mint, burn, clawback.`,
-      });
-      return null;
-    }
-    return types;
-  };
-
-  /**
-   * Parse an ISO 8601 date string.
-   * Returns undefined when absent, a Date when valid, null when invalid
-   * (also sends a 400 so the caller should return immediately).
-   */
-  const parseDateParam = (val: unknown, res: Response): Date | null | undefined => {
-    if (val === undefined || val === "") return undefined;
-    const d = new Date(String(val));
-    if (isNaN(d.getTime())) {
-      res.status(400).json({ error: `Invalid date: "${val}". Expected ISO 8601 (e.g. 2025-01-01T00:00:00Z).` });
-      return null;
-    }
-    return d;
-  };
 
   // ─── GET /healthz — K8s/Render liveness probe ───────────────────────────
   /**

@@ -6,8 +6,6 @@ import { requestNetwork } from "../../middleware/network";
 import { getCachedTokenDecimals } from "../../tokenCache";
 import { toDisplayAmount } from "../../amount";
 
-const VALID_EVENT_TYPES = new Set(["transfer", "mint", "burn", "clawback"]);
-
 const withDisplay = <T extends { amount: string; contractId?: string }>(
   transfer: T,
   network: ReturnType<typeof requestNetwork>,
@@ -18,34 +16,6 @@ const withDisplay = <T extends { amount: string; contractId?: string }>(
     transfer.contractId ? getCachedTokenDecimals(transfer.contractId, network) : undefined,
   ),
 });
-const parseIntParam = (val: unknown, fallback: number): number => {
-  const n = parseInt(String(val), 10);
-  return isNaN(n) ? fallback : n;
-};
-
-const parseEventTypes = (val: unknown, res: Response): string[] | null | undefined => {
-  if (val === undefined || val === "") return undefined;
-  const types = String(val).split(",").map((s) => s.trim()).filter(Boolean);
-  const invalid = types.filter((t) => !VALID_EVENT_TYPES.has(t));
-  if (invalid.length) {
-    res.status(400).json({
-      error: `Invalid eventType: "${invalid.join('", "')}". Valid values: transfer, mint, burn, clawback.`,
-    });
-    return null;
-  }
-  return types;
-};
-
-const parseDateParam = (val: unknown, res: Response): Date | null | undefined => {
-  if (val === undefined || val === "") return undefined;
-  const d = new Date(String(val));
-  if (isNaN(d.getTime())) {
-    res.status(400).json({ error: `Invalid date: "${val}". Expected ISO 8601 (e.g. 2025-01-01T00:00:00Z).` });
-    return null;
-  }
-  return d;
-};
-
 export function createAccountsTransfersRouter(): Router {
   const router = Router({ mergeParams: true });
 

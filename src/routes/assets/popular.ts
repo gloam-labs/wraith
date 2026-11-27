@@ -5,9 +5,6 @@ import { popularAssetsQuerySchema } from "../../openapi/schemas";
 import { requestNetwork } from "../../middleware/network";
 import { getCachedTokenDecimals } from "../../tokenCache";
 
-const VALID_WINDOWS = new Set(["1h", "24h", "7d"]);
-const VALID_SORT_BY = new Set(["transfers", "volume"]);
-
 function windowToDate(window: string): Date {
   const now = new Date();
   switch (window) {
@@ -17,8 +14,6 @@ function windowToDate(window: string): Date {
       return new Date(now.getTime() - 24 * 60 * 60 * 1000);
     case "7d":
       return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    default:
-      return new Date(now.getTime() - 24 * 60 * 60 * 1000);
   }
 }
 
