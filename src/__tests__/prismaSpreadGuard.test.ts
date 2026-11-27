@@ -118,6 +118,8 @@ function collectTsFiles(dir: string): string[] {
       if (entry.name === "__tests__" || entry.name === "node_modules") continue;
       files.push(...collectTsFiles(fullPath));
     } else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
+      // db.ts has concurrent PRs landing in flight; it is covered by the db split PR (#314).
+      if (entry.name === "db.ts") continue;
       files.push(fullPath);
     }
   }

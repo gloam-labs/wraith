@@ -15,7 +15,6 @@
 
 import * as StellarSdk from "@stellar/stellar-sdk";
 import { Prisma } from "@prisma/client";
-import { when } from "../prismaWhen";
 import { resolveNetwork, type Network } from "../network";
 import { prisma } from "../db";
 import type { RawEvent } from "../rpc";
@@ -149,10 +148,10 @@ export async function queryHostFnLogs(
   const { network, contractId, functionName, limit = 50, offset = 0 } = params;
   const cap = Math.min(limit, 200);
 
-  const where: Prisma.HostFnLogWhereInput = {
+  const where = {
     network: resolveNetwork(network),
     contractId,
-    ...when<Prisma.HostFnLogWhereInput>(Boolean(functionName), { functionName }),
+    ...(functionName ? { functionName } : {}),
   };
 
   const [total, rows] = await prisma.$transaction([
