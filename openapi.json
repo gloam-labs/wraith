@@ -64,6 +64,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -82,6 +85,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -99,6 +105,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -246,6 +255,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -264,6 +276,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -281,6 +296,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -891,6 +909,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -909,6 +930,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -926,6 +950,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -1241,6 +1268,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -1259,6 +1289,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -1276,6 +1309,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -1591,6 +1627,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -1609,6 +1648,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -1626,6 +1668,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -1941,6 +1986,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -1959,6 +2007,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -1976,6 +2027,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -2130,6 +2184,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2148,6 +2205,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2165,6 +2225,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -2294,6 +2357,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2312,6 +2378,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2329,6 +2398,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -2506,6 +2578,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2524,6 +2599,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2541,6 +2619,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -2682,6 +2763,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2700,6 +2784,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2717,6 +2804,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -2820,6 +2910,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2838,6 +2931,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -2855,6 +2951,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -3170,6 +3269,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3188,6 +3290,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3205,6 +3310,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -3365,6 +3473,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3383,6 +3494,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3400,6 +3514,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -3491,6 +3608,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3509,6 +3629,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3526,6 +3649,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -3584,6 +3710,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3602,6 +3731,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3619,6 +3751,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -3773,6 +3908,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3791,6 +3929,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3808,6 +3949,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -3979,6 +4123,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -3997,6 +4144,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4014,6 +4164,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -4277,6 +4430,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4295,6 +4451,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4312,6 +4471,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -4408,6 +4570,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4426,6 +4591,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4443,6 +4611,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -4611,6 +4782,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4629,6 +4803,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4646,6 +4823,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -4753,6 +4933,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4771,6 +4954,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4788,6 +4974,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -4900,6 +5089,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4918,6 +5110,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -4935,6 +5130,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -5228,6 +5426,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5245,6 +5446,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -5264,6 +5468,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5282,6 +5489,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5299,6 +5509,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -5449,6 +5662,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5467,6 +5683,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5484,6 +5703,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -5634,6 +5856,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5652,6 +5877,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5669,6 +5897,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -5718,6 +5949,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -5735,6 +5969,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -5783,11 +6020,22 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Prose for a person. Never branch on it — it changes when the provider rewords an error."
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Stable machine-readable reason. Provider codes arrive verbatim; wraith-assigned codes are catalogued in docs/ngn-rails.md.",
+                      "example": "coin_not_available"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "number",
+                      "description": "On a provider 429 only: how long the shared limit asks you to wait."
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5801,11 +6049,22 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Prose for a person. Never branch on it — it changes when the provider rewords an error."
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Stable machine-readable reason. Provider codes arrive verbatim; wraith-assigned codes are catalogued in docs/ngn-rails.md.",
+                      "example": "coin_not_available"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "number",
+                      "description": "On a provider 429 only: how long the shared limit asks you to wait."
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5819,11 +6078,22 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Prose for a person. Never branch on it — it changes when the provider rewords an error."
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Stable machine-readable reason. Provider codes arrive verbatim; wraith-assigned codes are catalogued in docs/ngn-rails.md.",
+                      "example": "coin_not_available"
+                    },
+                    "retryAfterSeconds": {
+                      "type": "number",
+                      "description": "On a provider 429 only: how long the shared limit asks you to wait."
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -6659,6 +6929,15 @@
                     "coin": {
                       "type": "string"
                     },
+                    "coinType": {
+                      "type": "string"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "depositDigest": {
+                      "type": "string"
+                    },
                     "amountStableCoin": {
                       "type": "number",
                       "description": "Stablecoin amount."
@@ -6677,7 +6956,7 @@
                     },
                     "providerStatus": {
                       "type": "string",
-                      "description": "Raw provider status, when the order is not a replay."
+                      "description": "Raw provider status, when the order is a replay."
                     },
                     "replayed": {
                       "type": "boolean"
@@ -6725,6 +7004,15 @@
                     "coin": {
                       "type": "string"
                     },
+                    "coinType": {
+                      "type": "string"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "depositDigest": {
+                      "type": "string"
+                    },
                     "amountStableCoin": {
                       "type": "number",
                       "description": "Stablecoin amount."
@@ -6743,7 +7031,7 @@
                     },
                     "providerStatus": {
                       "type": "string",
-                      "description": "Raw provider status, when the order is not a replay."
+                      "description": "Raw provider status, when the order is a replay."
                     },
                     "replayed": {
                       "type": "boolean"
@@ -7027,6 +7315,15 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "string"
+                    },
+                    "updated": {
+                      "type": "string"
                     },
                     "source": {
                       "type": "string",
@@ -7462,6 +7759,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -7479,6 +7779,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
@@ -7498,6 +7801,9 @@
                   "properties": {
                     "error": {
                       "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -7515,6 +7821,9 @@
                   "type": "object",
                   "properties": {
                     "error": {
+                      "type": "string"
+                    },
+                    "code": {
                       "type": "string"
                     }
                   },
