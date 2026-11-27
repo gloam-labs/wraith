@@ -55,6 +55,15 @@ jest.mock("../db", () => ({
     }
     return added;
   }),
+  upsertTransfersReturning: jest.fn(async (records: Row[]) => {
+    const inserted: Row[] = [];
+    for (const r of records) {
+      if (mockStore.transfers.has(String(r.eventId))) continue;
+      mockStore.transfers.set(String(r.eventId), { ...r });
+      inserted.push(r);
+    }
+    return inserted;
+  }),
   // Aggregated per (address, contract), so the result does not depend on the
   // order or grouping of batches, only on which records reached it.
   upsertAccountSummaries: jest.fn(async (records: Row[]) => {
@@ -132,6 +141,7 @@ jest.mock("../ingester/nft", () => ({
 import * as batch from "../indexer/batch";
 import { pollParallel } from "../indexer/parallel";
 import { createLoopState, ingestWindow, type LoopState } from "../indexer";
+import { _resetMetrics, eventsSkippedTotal, registry } from "../metrics";
 
 // ─── Fixtures (all strkeys built from raw bytes, so valid by construction) ────
 const contract = (n: number) => StrKey.encodeContract(Buffer.alloc(32, n));
@@ -213,6 +223,7 @@ function snapshot() {
 beforeEach(() => {
   mockResetStore();
   seq = 0;
+  _resetMetrics();
 });
 
 describe("ingest path parity", () => {
@@ -282,7 +293,7 @@ describe("ingest path parity", () => {
       processBatch: async (events) => {
         const { upsertTransfers } = jest.requireMock("../db");
         const { parseEvents } = jest.requireActual("../decoder");
-        const n = await upsertTransfers(parseEvents(events));
+        const n = await upsertTransfers(parseEvents(events, "testnet"));
         return { fungibleInserted: n, nftInserted: 0, lpInserted: 0 };
       },
     });
@@ -291,5 +302,27 @@ describe("ingest path parity", () => {
     expect(drifted.nftTransfers).not.toEqual(singleSnap.nftTransfers);
     expect(drifted.summaries).not.toEqual(singleSnap.summaries);
     expect(drifted).not.toEqual(singleSnap);
+  });
+
+  it("events_skipped_total carries network: a testnet batch and a mainnet batch produce separate series (#445)", async () => {
+    const { parseEvents } = await import("../decoder");
+
+    // A batch of one event that is not a token event (non-token = "unrecognised").
+    // Use an event whose topic[0] symbol is unknown to the fungible decoder.
+    const unknownEvent = ev(SAC_A, 50, [sym("deposit"), addr(ALICE)], i128(0n));
+
+    parseEvents([unknownEvent], "testnet");
+    parseEvents([unknownEvent], "testnet");
+    parseEvents([unknownEvent], "mainnet");
+
+    const text = await registry.metrics();
+
+    // The two networks must appear as distinct series.
+    expect(text).toContain('events_skipped_total{network="testnet",reason="unrecognised"} 2');
+    expect(text).toContain('events_skipped_total{network="mainnet",reason="unrecognised"} 1');
+
+    // No label should hold a contract id, address or event id.
+    const lines = text.split("\n").filter((l) => l.startsWith("events_skipped_total{"));
+    expect(lines.join("\n")).not.toMatch(/contract=|address=|event=|id=/);
   });
 });

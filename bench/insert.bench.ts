@@ -1,13 +1,16 @@
 /**
  * Batch-insert throughput benchmark (issue #107)
  *
- * Measures rows-per-second for upsertTransfers across different batch sizes.
+ * Measures rows-per-second for upsertTransfers across different batch sizes,
+ * and (issue #450) the time upsertAccountSummaries takes for a batch touching a
+ * given number of distinct addresses.
  * Run:  npm run bench
  * Output: bench/results.json
  */
 import { Bench } from "tinybench";
 import { writeFileSync } from "fs";
-import { prisma } from "../src/db";
+import { StrKey } from "@stellar/stellar-sdk";
+import { prisma, upsertAccountSummaries } from "../src/db";
 import type { TransferRecord } from "../src/db";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -30,6 +33,22 @@ function makeBatch(size: number, batchId: string): TransferRecord[] {
   return Array.from({ length: size }, (_, i) => makeRecord(i, batchId));
 }
 
+/** A valid ed25519 public key that belongs to nobody, unique per `n`. */
+function benchAddress(n: number): string {
+  const seed = Buffer.alloc(32);
+  seed.writeUInt32BE(n, 0);
+  return StrKey.encodeEd25519PublicKey(seed);
+}
+
+/** One outgoing transfer per distinct address, so the totals touch `size` pairs. */
+function makeSummaryBatch(size: number, batchId: string): TransferRecord[] {
+  return Array.from({ length: size }, (_, i) => ({
+    ...makeRecord(i, batchId),
+    fromAddress: benchAddress(i),
+    toAddress: null,
+  }));
+}
+
 // ── run ───────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -49,6 +68,15 @@ async function main() {
     });
   }
 
+  // #450: one outgoing transfer per address, so the pair count equals `size`.
+  const SUMMARY_SIZES = [100, 1000, 5000];
+  for (const size of SUMMARY_SIZES) {
+    bench.add(`upsertAccountSummaries addresses=${size}`, async () => {
+      const id = `summary-${size}-${callId++}`;
+      await upsertAccountSummaries(makeSummaryBatch(size, id));
+    });
+  }
+
   console.log("Running batch-insert benchmark…");
   await bench.run();
 
@@ -57,7 +85,7 @@ async function main() {
     const r    = t.result as unknown as Record<string, unknown> | undefined;
     const lat  = (r?.latency  ?? {}) as Record<string, number>;
     const tput = (r?.throughput ?? {}) as Record<string, number>;
-    const size = Number(t.name.match(/batch=(\d+)/)?.[1] ?? 0);
+    const size = Number(t.name.match(/(?:batch|addresses)=(\d+)/)?.[1] ?? 0);
     const opsPerSec = tput.mean ?? 0;
     return {
       name:          t.name,

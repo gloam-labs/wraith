@@ -339,6 +339,20 @@ describe("createOnrampOrder", () => {
     );
     expect((global.fetch as jest.Mock).mock.calls).toHaveLength(0);
   });
+
+  // #462: our own guards must not answer `provider_rejected`, which is the code
+  // for a refusal Linq sent. The route checks these first; this is the second
+  // line of defence and carries the same code.
+  it.each([
+    ['amountStableCoin', { amountStableCoin: 0 }],
+    ['rate', { rate: 0 }],
+  ])('gives its own %s refusal the invalid_request code', async (_label, override) => {
+    global.fetch = jest.fn() as never;
+    const err = await createOnrampOrder({ ...base, ...override, coin: 'xlm' }).catch((e) => e);
+    expect(err).toBeInstanceOf(LinqError);
+    expect(err.code).toBe('invalid_request');
+    expect((global.fetch as jest.Mock).mock.calls).toHaveLength(0);
+  });
 });
 
 describe("getOnrampStatus", () => {

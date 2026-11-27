@@ -3,6 +3,8 @@ import path from "path";
 import { OpenAPIRegistry, OpenApiGeneratorV3 } from "@asteasolutions/zod-to-openapi";
 import { getOhlcRefreshIntervalMs } from "../ohlcConfig";
 import {
+  accountSummaryQuerySchema,
+  accountSummaryResponseSchema,
   addressPathSchema,
   booleanOkResponseSchema,
   candlesParamsSchema,
@@ -84,6 +86,7 @@ const commonErrorResponses = {
 
 const transferQueryOnlySchema = transferQuerySchema.omit({ address: true });
 const summaryQueryOnlySchema = summaryQuerySchema.omit({ address: true });
+const accountSummaryQueryOnlySchema = accountSummaryQuerySchema.omit({ address: true });
 
 const transferListResponses = {
   200: { description: "OK", content: { "application/json": { schema: transferListResponseSchema } } },
@@ -179,6 +182,7 @@ registry.registerPath({
   request: { query: statusQuerySchema },
   responses: {
     200: { description: "OK", content: { "application/json": { schema: statusResponseSchema } } },
+    503: { description: "Database unavailable", content: { "application/json": { schema: errorResponseSchema } } },
     ...commonErrorResponses,
   },
 });
@@ -265,13 +269,19 @@ registry.registerPath({
 registry.registerPath({
   method: "get",
   path: "/accounts/{address}/summary",
-  summary: "Token summary",
+  summary: "Per-asset account summary",
+  description:
+    "One all-time row per asset the address has ever sent or received, read from a " +
+    "materialised rollup. It is not the same answer as GET /summary/{address}, which " +
+    "computes over transfer rows and takes a date window: this route has no window to " +
+    "filter, so it refuses fromDate and toDate instead of returning all-time totals for " +
+    "a request that asked for a month.",
   request: {
     params: addressPathSchema,
-    query: summaryQueryOnlySchema,
+    query: accountSummaryQueryOnlySchema,
   },
   responses: {
-    200: { description: "OK", content: { "application/json": { schema: summaryResponseSchema } } },
+    200: { description: "OK", content: { "application/json": { schema: accountSummaryResponseSchema } } },
     ...commonErrorResponses,
   },
 });
@@ -454,6 +464,7 @@ registry.registerPath({
   request: { query: feesQuerySchema },
   responses: {
     200: { description: "OK", content: { "application/json": { schema: feesResponseSchema } } },
+    500: { description: "Internal Server Error", content: { "application/json": { schema: errorResponseSchema } } },
   },
 });
 
@@ -466,10 +477,11 @@ registry.registerPath({
     "records of money-affecting failures — a rejected payout, an order that ended " +
     "failed after the user paid, a webhook reconciliation that gave up — so an " +
     "operator can answer \"what broke today\" without a log search or database " +
-    "access. Ordinary validation errors are never recorded here. Requires " +
-    "`Authorization: Bearer <OPS_TOKEN>`; answers 503 when the deployment has no " +
-    "token configured, and 401 for a missing or wrong one. Rows name the rail, the " +
-    "order and what failed, and never carry a NIN.",
+    "access. Ordinary validation errors are never recorded here. Supports cursor " +
+    "pagination via `before` (passing `nextBefore` from the previous page) and " +
+    "filtering by `network`. Requires `Authorization: Bearer <OPS_TOKEN>`; answers " +
+    "503 when the deployment has no token configured, and 401 for a missing or " +
+    "wrong one. Rows name the rail, the order and what failed, and never carry a NIN.",
   "x-internal": true,
   request: { query: opsFailuresQuerySchema },
   responses: {
@@ -549,8 +561,10 @@ registry.registerPath({
 });
 
 const internalErrorResponses = {
-  ...commonErrorResponses,
+  400: { description: "Bad Request", content: { "application/json": { schema: railErrorResponseSchema } } },
+  404: { description: "Not Found", content: { "application/json": { schema: railErrorResponseSchema } } },
   429: { description: "Rate limited (this deployment's or the provider's — the `code` says which)", content: { "application/json": { schema: railErrorResponseSchema } } },
+  500: { description: "Internal Server Error", content: { "application/json": { schema: railErrorResponseSchema } } },
   502: { description: "Payout provider error", content: { "application/json": { schema: railErrorResponseSchema } } },
   503: { description: "Offramp not configured on this deployment", content: { "application/json": { schema: railErrorResponseSchema } } },
 };
@@ -568,7 +582,9 @@ registry.registerPath({
       description: "OK",
       content: { "application/json": { schema: offrampAvailabilityResponseSchema } },
     },
-    ...commonErrorResponses,
+    400: { description: "Bad Request", content: { "application/json": { schema: railErrorResponseSchema } } },
+    404: { description: "Not Found", content: { "application/json": { schema: railErrorResponseSchema } } },
+    500: { description: "Internal Server Error", content: { "application/json": { schema: railErrorResponseSchema } } },
     // No 502: nothing here reaches the provider. 503 is the answer a client
     // hides its cash-out CTA on, so it is the one that has to be documented.
     503: { description: "Offramp not configured on this deployment", content: { "application/json": { schema: railErrorResponseSchema } } },
@@ -634,6 +650,7 @@ registry.registerPath({
   responses: {
     201: { description: "Order created", content: { "application/json": { schema: offrampOrderResponseSchema } } },
     200: { description: "Replayed existing order (same idempotencyKey)", content: { "application/json": { schema: offrampOrderResponseSchema } } },
+    409: { description: "Idempotency conflict — same key but different request details (code: idempotency_conflict)", content: { "application/json": { schema: railErrorResponseSchema } } },
     ...internalErrorResponses,
   },
 });
@@ -644,11 +661,17 @@ registry.registerPath({
   summary: "Get the status of a cash-out order",
   description: internalDescription,
   "x-internal": true,
+  security: [{ bearerAuth: [] }],
   request: { params: offrampOrderParamsSchema },
   responses: {
     200: { description: "OK", content: { "application/json": { schema: offrampOrderStatusResponseSchema } } },
+    400: { description: "Bad Request", content: { "application/json": { schema: railErrorResponseSchema } } },
     401: { description: "Order access token required (code: unauthorized)", content: { "application/json": { schema: railErrorResponseSchema } } },
-    ...internalErrorResponses,
+    404: { description: "Unknown order id, malformed id, or token that does not match (code: order_not_found)", content: { "application/json": { schema: railErrorResponseSchema } } },
+    429: { description: "Too many failed lookups from this IP (code: veil_rate_limited)", content: { "application/json": { schema: railErrorResponseSchema } } },
+    500: { description: "Internal Server Error", content: { "application/json": { schema: railErrorResponseSchema } } },
+    502: { description: "Payout provider error", content: { "application/json": { schema: railErrorResponseSchema } } },
+    503: { description: "Offramp not configured on this deployment", content: { "application/json": { schema: railErrorResponseSchema } } },
   },
 });
 

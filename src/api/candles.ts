@@ -91,7 +91,7 @@ export function createCandlesRouter(): Router {
       res.json({ bucket, contractId, candles });
     } catch {
       console.error("[candles] Query failed");
-      res.status(500).json({ error: "Failed to query candles" });
+      res.status(500).json({ error: "Failed to query candles", code: "internal_error" });
     }
   });
 

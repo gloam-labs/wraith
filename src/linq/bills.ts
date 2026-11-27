@@ -160,19 +160,24 @@ export async function payBill(params: PayBillParams): Promise<BillOrderResponse>
     refundAddress,
   } = params;
 
+  // These are our refusals, not the provider's. Without a code of their own
+  // they fall through to the generic `provider_rejected` fallback, which blames
+  // Linq for a request it was never asked. They stay as a second line of
+  // defence: the routes check the same fields first, before spending a rate
+  // fetch.
   if (!(amountNgn > 0)) {
-    throw new LinqError("amountNgn must be greater than zero", 400);
+    throw new LinqError("amountNgn must be greater than zero", 400, "invalid_request");
   }
   if (!(amountStableCoin > 0)) {
-    throw new LinqError("amountStableCoin must be greater than zero", 400);
+    throw new LinqError("amountStableCoin must be greater than zero", 400, "invalid_request");
   }
   if (!(rate > 0)) {
-    throw new LinqError("rate must be greater than zero", 400);
+    throw new LinqError("rate must be greater than zero", 400, "invalid_request");
   }
   // A missing refund address is only discovered when a bill fails, which is
   // exactly when the user's money is already gone.
   if (!refundAddress) {
-    throw new LinqError("refundAddress is required", 400);
+    throw new LinqError("refundAddress is required", 400, "invalid_request");
   }
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;

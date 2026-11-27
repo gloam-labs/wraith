@@ -95,12 +95,27 @@ export function resolveWatchedContractIds(network?: Network): string[] {
   return [...new Set([...resolveSacContractIds(network), ...resolveNftContractIds(network)])];
 }
 import { initTokenCache } from "./tokenCache";
+import { readIntEnv } from "./utils/env";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 // These stay process-wide: they describe how hard to poll, not which chain.
-const POLL_INTERVAL_MS  = parseInt(process.env.POLL_INTERVAL_MS    ?? "6000",  10);
-const BATCH_SIZE        = parseInt(process.env.EVENTS_BATCH_SIZE   ?? "10000", 10);
-const INGEST_WORKERS    = parseInt(process.env.INGEST_WORKERS      ?? "1",     10);
+// Cap poll interval so `POLL_INTERVAL_MS * 2` error back-off stays within Node's
+// 32-bit signed timer limit (delays above 2^31-1 ms clamp to 1ms).
+const POLL_INTERVAL_MS = readIntEnv("POLL_INTERVAL_MS", {
+  defaultValue: 6000,
+  min: 500,
+  max: 1_073_741_823,
+});
+const BATCH_SIZE = readIntEnv("EVENTS_BATCH_SIZE", {
+  defaultValue: 10_000,
+  min: 1,
+  max: 10_000,
+});
+const INGEST_WORKERS = readIntEnv("INGEST_WORKERS", {
+  defaultValue: 1,
+  min: 1,
+  max: 100,
+});
 
 // Stellar testnet RPC retains ~7 days ≈ 120 000 ledgers (at ~5s per ledger).
 // We cap the back-fill look-back so we never request a ledger that's already pruned.
@@ -118,10 +133,11 @@ const PRUNE_EVERY_CYCLES = 600;
 // rarer than a poll: a contract's TTL is measured in weeks, and detecting an
 // expiry ten minutes late costs nothing. Doing it every cycle would multiply
 // the indexer's RPC budget by the size of the watch list for no benefit.
-const TOMBSTONE_EVERY_CYCLES = parseInt(
-  process.env.TOMBSTONE_CHECK_EVERY_CYCLES ?? "100",
-  10,
-);
+const TOMBSTONE_EVERY_CYCLES = readIntEnv("TOMBSTONE_CHECK_EVERY_CYCLES", {
+  defaultValue: 100,
+  min: 0,
+  max: 2_147_483_647,
+});
 
 // ─── Per-network loop state ───────────────────────────────────────────────────
 /**

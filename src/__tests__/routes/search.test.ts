@@ -19,6 +19,7 @@ import {
   type RawAssetHit,
   type RawContractHit,
 } from "../../routes/search";
+import { withOpenApiResponseValidation } from "../../openapi/responseValidator";
 
 const mockAccounts = prisma.accountSummary.findMany as jest.Mock;
 const mockAssets = prisma.tokenTransfer.findMany as jest.Mock;
@@ -34,10 +35,11 @@ function buildApp() {
   // Minimal error handler so the route's `next(err)` path is observable.
   app.use(
     (err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-      res.status(500).json({ error: err.message });
+      // The same shape the real handler sends: every error body carries a code.
+      res.status(500).json({ error: err.message, code: "internal_error" });
     },
   );
-  return app;
+  return withOpenApiResponseValidation(app);
 }
 
 beforeEach(() => {

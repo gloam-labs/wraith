@@ -61,9 +61,10 @@ describe("Wraith integration API", () => {
   });
 
   it("aggregates account summary across incoming and outgoing events", async () => {
-    // Use /summary/:address (the querySummary handler returning `tokens`). The
-    // /accounts/:address/summary route is shadowed by the accounts router, which
-    // returns a different `{ address, assets }` shape.
+    // /summary/:address is the windowed one: `tokens`, computed from the
+    // transfer rows. /accounts/:address/summary is a different answer —
+    // `{ address, assets }`, all-time, read from the materialised rollup — so
+    // it has its own route rather than being a second path to this handler.
     const body = await getJson(`/summary/${ALICE}`);
 
     expect(body.address).toBe(ALICE);

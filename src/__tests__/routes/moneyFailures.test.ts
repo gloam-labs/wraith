@@ -54,7 +54,11 @@ function model(table: keyof typeof tables) {
     }),
     create: jest.fn(async ({ data }: { data: Row }) => {
       await tick();
-      const row = { id: nextId++, createdAt: new Date(), updatedAt: new Date(), ...data };
+      const defaults: Row =
+        table === "moneyFailure"
+          ? { network: "testnet", orderId: null, publicId: null, providerCode: null, occurrences: 1 }
+          : {};
+      const row = { id: nextId++, ...defaults, createdAt: new Date(), updatedAt: new Date(), ...data };
       tables[table].push(row);
       return row;
     }),
@@ -93,7 +97,30 @@ function model(table: keyof typeof tables) {
       async ({ where = {}, orderBy, take }: { where?: Row; orderBy?: Row; take?: number }) => {
         await tick();
         let rows = tables[table].filter((r) =>
-          Object.entries(where).every(([k, v]) => r[k] === v),
+          Object.entries(where).every(([k, v]) => {
+            if (v !== null && typeof v === "object" && !(v instanceof Date)) {
+              if ("lt" in v && (v as any).lt !== undefined) {
+                const val = (v as any).lt;
+                return val instanceof Date ? r[k] < val : r[k] < val;
+              }
+              if ("lte" in v && (v as any).lte !== undefined) {
+                const val = (v as any).lte;
+                return val instanceof Date ? r[k] <= val : r[k] <= val;
+              }
+              if ("gt" in v && (v as any).gt !== undefined) {
+                const val = (v as any).gt;
+                return val instanceof Date ? r[k] > val : r[k] > val;
+              }
+              if ("gte" in v && (v as any).gte !== undefined) {
+                const val = (v as any).gte;
+                return val instanceof Date ? r[k] >= val : r[k] >= val;
+              }
+            }
+            if (v instanceof Date && r[k] instanceof Date) {
+              return r[k].getTime() === v.getTime();
+            }
+            return r[k] === v;
+          }),
         );
         if (orderBy?.id === "desc") rows = [...rows].sort((a, b) => b.id - a.id);
         return take !== undefined ? rows.slice(0, take) : rows;
@@ -128,6 +155,7 @@ import { recordNgnOrder } from "../../linq/ngnOrders";
 import { computeSignature, SIGNATURE_HEADER } from "../../linq/webhook";
 import { moneyFailuresTotal, _resetMetrics } from "../../metrics";
 import { installFakeLinq, type FakeLinq } from "../fakes/linqProvider";
+import { withOpenApiResponseValidation } from "../../openapi/responseValidator";
 
 const mockStatus = getOfframpStatus as jest.Mock;
 
@@ -161,7 +189,7 @@ function makeApp() {
   app.use(networkMiddleware);
   app.use("/offramp", createOfframpRouter());
   app.use("/ops", createOpsRouter());
-  return app;
+  return withOpenApiResponseValidation(app);
 }
 
 /** Signed webhook delivery, as Linq sends it. */
@@ -521,6 +549,97 @@ describe("ordinary validation errors are not incidents", () => {
   });
 });
 
+// ─── A refund still in flight is not an ending (#418) ─────────────────────────
+
+describe("a pending refund", () => {
+  // Each of these contains an ending word ("refund", "cancel", "revers") and
+  // describes an order that is still moving. A substring match read them as
+  // endings: it wrote a MoneyFailure row and told wallet apps the order was
+  // finished.
+  const pending = [
+    "refund_pending",
+    "refund_processing",
+    "cancel_requested",
+    "reversal_pending",
+    "awaiting_refund",
+  ];
+
+  it.each(pending)("%s from a webhook writes no failure row", async (status) => {
+    const app = makeApp();
+    await placeOrder(app);
+    const orderId = tables.offrampOrder[0].orderId;
+
+    await deliver(app, { event: "order.processing", orderId, status });
+    await reconciled();
+
+    expect(tables.offrampOrder[0].status).toBe(status);
+    expect(tables.moneyFailure).toHaveLength(0);
+    const counted = await moneyFailuresTotal.get();
+    expect(counted.values.reduce((sum, v) => sum + v.value, 0)).toBe(0);
+  });
+
+  it.each(pending)("%s from a status poll writes no row and is not sent as finished", async (status) => {
+    const app = makeApp();
+    const placed = await placeOrder(app);
+    const orderId = tables.offrampOrder[0].orderId;
+    mockStatus.mockResolvedValue({
+      id: orderId,
+      status,
+      amountStableCoin: 50,
+      amountNGN: 75000,
+      currency: "NGN",
+      created: "2026-01-01T00:00:00.000Z",
+      updated: "2026-01-01T00:00:00.000Z",
+    });
+
+    const res = await request(app)
+      .get(`/offramp/orders/${placed.id}`)
+      .set("Authorization", `Bearer ${placed.accessToken}`);
+    expect(res.status).toBe(200);
+    // Exactly the provider's word: no "(failed)" or "(timeout)" for an
+    // installed app to read as the end of the order.
+    expect(res.body.status).toBe(status);
+    expect(res.body.providerStatus).toBe(status);
+    expect(tables.offrampOrder[0].status).toBe(status);
+    expect(tables.moneyFailure).toHaveLength(0);
+  });
+
+  it("an onramp refund_pending writes no failure row; the refund itself does", async () => {
+    await recordNgnOrder({
+      network: "testnet",
+      kind: "onramp",
+      orderId: "00000000-0000-4000-8000-0000000000c1",
+      customerRef: "ref_test_0002",
+      walletAddress: WALLET,
+      coin: "xlm",
+      amountStableCoin: 1,
+      amountNgn: 1500,
+      rate: 1500,
+      status: "processing",
+    });
+    const app = makeApp();
+
+    await deliver(app, {
+      event: "order.processing",
+      orderId: "00000000-0000-4000-8000-0000000000c1",
+      status: "refund_pending",
+    });
+    await reconciled();
+    expect(tables.ngnOrder[0].status).toBe("refund_pending");
+    expect(tables.moneyFailure).toHaveLength(0);
+
+    await deliver(app, {
+      event: "order.failed",
+      orderId: "00000000-0000-4000-8000-0000000000c1",
+      status: "refunded",
+    });
+    await reconciled();
+    expect(tables.moneyFailure).toHaveLength(1);
+    expect(tables.moneyFailure[0].kind).toBe("order_failed");
+    expect(tables.moneyFailure[0].rail).toBe("onramp");
+  });
+});
+
 // ─── GET /ops/failures — the operator surface ────────────────────────────────
 
 describe("GET /ops/failures", () => {
@@ -642,5 +761,195 @@ describe("GET /ops/failures", () => {
     const silly = await request(app).get("/ops/failures?limit=99999").set(auth);
     expect(silly.status).toBe(200);
     expect(silly.body.limit).toBe(200);
+  });
+
+  it("paginates backwards using before and returns null on the last page", async () => {
+    process.env.OPS_TOKEN = OPS_TOKEN;
+    const app = makeApp();
+
+    for (let i = 1; i <= 5; i++) {
+      await prisma.moneyFailure.create({
+        data: {
+          network: "testnet",
+          rail: "offramp",
+          kind: "payout_rejected",
+          orderId: `00000000-0000-4000-8000-00000000000${i}`,
+          message: `Payout failure ${i}`,
+        },
+      });
+    }
+
+    // Page 1: newest two rows (5, 4)
+    const page1 = await request(app).get("/ops/failures?limit=2").set(auth);
+    expect(page1.status).toBe(200);
+    expect(page1.body.failures).toHaveLength(2);
+    expect(page1.body.failures[0].id).toBe(5);
+    expect(page1.body.failures[1].id).toBe(4);
+    expect(page1.body.limit).toBe(2);
+    expect(page1.body.nextBefore).toBe(4);
+
+    // Page 2: rows older than 4 (3, 2)
+    const page2 = await request(app).get(`/ops/failures?limit=2&before=${page1.body.nextBefore}`).set(auth);
+    expect(page2.status).toBe(200);
+    expect(page2.body.failures).toHaveLength(2);
+    expect(page2.body.failures[0].id).toBe(3);
+    expect(page2.body.failures[1].id).toBe(2);
+    expect(page2.body.nextBefore).toBe(2);
+
+    // Page 3: rows older than 2 (1) — last page returns nextBefore: null
+    const page3 = await request(app).get(`/ops/failures?limit=2&before=${page2.body.nextBefore}`).set(auth);
+    expect(page3.status).toBe(200);
+    expect(page3.body.failures).toHaveLength(1);
+    expect(page3.body.failures[0].id).toBe(1);
+    expect(page3.body.nextBefore).toBeNull();
+  });
+
+  it("does not skip or duplicate rows when new rows arrive during pagination", async () => {
+    process.env.OPS_TOKEN = OPS_TOKEN;
+    const app = makeApp();
+
+    for (let i = 1; i <= 3; i++) {
+      await prisma.moneyFailure.create({
+        data: {
+          network: "testnet",
+          rail: "offramp",
+          kind: "payout_rejected",
+          orderId: `00000000-0000-4000-8000-00000000000${i}`,
+          message: `Failure ${i}`,
+        },
+      });
+    }
+
+    const page1 = await request(app).get("/ops/failures?limit=2").set(auth);
+    expect(page1.body.failures.map((f: { id: number }) => f.id)).toEqual([3, 2]);
+    expect(page1.body.nextBefore).toBe(2);
+
+    // A new failure arrives concurrently with the operator reading
+    await prisma.moneyFailure.create({
+      data: {
+        network: "testnet",
+        rail: "offramp",
+        kind: "payout_rejected",
+        orderId: "00000000-0000-4000-8000-000000000099",
+        message: "New failure arrived",
+      },
+    });
+
+    // Page 2 still asks for rows before 2, immune to the new row
+    const page2 = await request(app).get(`/ops/failures?limit=2&before=${page1.body.nextBefore}`).set(auth);
+    expect(page2.body.failures.map((f: { id: number }) => f.id)).toEqual([1]);
+    expect(page2.body.nextBefore).toBeNull();
+  });
+
+  it("filters by network when a selector is sent, but returns all networks without one", async () => {
+    process.env.OPS_TOKEN = OPS_TOKEN;
+    const app = makeApp();
+
+    await prisma.moneyFailure.create({
+      data: {
+        network: "testnet",
+        rail: "offramp",
+        kind: "payout_rejected",
+        orderId: "00000000-0000-4000-8000-000000000001",
+        message: "Testnet failure",
+      },
+    });
+
+    await prisma.moneyFailure.create({
+      data: {
+        network: "mainnet",
+        rail: "offramp",
+        kind: "payout_rejected",
+        orderId: "00000000-0000-4000-8000-000000000002",
+        message: "Mainnet failure",
+      },
+    });
+
+    // Without selector: returns both
+    const all = await request(app).get("/ops/failures").set(auth);
+    expect(all.status).toBe(200);
+    expect(all.body.failures).toHaveLength(2);
+    const networks = all.body.failures.map((f: { network: string }) => f.network).sort();
+    expect(networks).toEqual(["mainnet", "testnet"]);
+
+    // With ?network=testnet: only testnet
+    const testnetOnly = await request(app).get("/ops/failures?network=testnet").set(auth);
+    expect(testnetOnly.status).toBe(200);
+    expect(testnetOnly.body.failures).toHaveLength(1);
+    expect(testnetOnly.body.failures[0].network).toBe("testnet");
+
+    // With ?network=mainnet: only mainnet
+    const mainnetOnly = await request(app).get("/ops/failures?network=mainnet").set(auth);
+    expect(mainnetOnly.status).toBe(200);
+    expect(mainnetOnly.body.failures).toHaveLength(1);
+    expect(mainnetOnly.body.failures[0].network).toBe("mainnet");
+
+    // With X-Network header: selector works via header too
+    const headerOnly = await request(app).get("/ops/failures").set(auth).set("X-Network", "mainnet");
+    expect(headerOnly.status).toBe(200);
+    expect(headerOnly.body.failures).toHaveLength(1);
+    expect(headerOnly.body.failures[0].network).toBe("mainnet");
+
+    // With unknown network: 400
+    const unknown = await request(app).get("/ops/failures?network=unknownchain").set(auth);
+    expect(unknown.status).toBe(400);
+  });
+
+  it("rejects non-positive integer limit and before with 400", async () => {
+    process.env.OPS_TOKEN = OPS_TOKEN;
+    const app = makeApp();
+
+    for (const badLimit of ["0", "-1", "-100", "abc", "", "1.5"]) {
+      const res = await request(app).get(`/ops/failures?limit=${badLimit}`).set(auth);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("limit must be a positive integer");
+    }
+
+    for (const badBefore of ["0", "-1", "-50", "xyz", "", "2.5"]) {
+      const res = await request(app).get(`/ops/failures?before=${badBefore}`).set(auth);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("before must be a positive integer");
+    }
+  });
+
+  it("filters by since ISO date and rejects malformed since with 400", async () => {
+    process.env.OPS_TOKEN = OPS_TOKEN;
+    const app = makeApp();
+
+    const t0 = new Date("2026-01-01T10:00:00.000Z");
+    const t1 = new Date("2026-01-01T12:00:00.000Z");
+
+    await prisma.moneyFailure.create({
+      data: {
+        network: "testnet",
+        rail: "offramp",
+        kind: "payout_rejected",
+        orderId: "00000000-0000-4000-8000-000000000001",
+        message: "Old failure",
+        createdAt: t0,
+      },
+    });
+
+    await prisma.moneyFailure.create({
+      data: {
+        network: "testnet",
+        rail: "offramp",
+        kind: "payout_rejected",
+        orderId: "00000000-0000-4000-8000-000000000002",
+        message: "Recent failure",
+        createdAt: t1,
+      },
+    });
+
+    const recent = await request(app)
+      .get("/ops/failures?since=2026-01-01T11:00:00.000Z")
+      .set(auth);
+    expect(recent.status).toBe(200);
+    expect(recent.body.failures).toHaveLength(1);
+    expect(recent.body.failures[0].orderId).toBe("00000000-0000-4000-8000-000000000002");
+
+    const badSince = await request(app).get("/ops/failures?since=not-a-date").set(auth);
+    expect(badSince.status).toBe(400);
+    expect(badSince.body.error).toBe("since must be a valid ISO date");
   });
 });

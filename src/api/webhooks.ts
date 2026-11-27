@@ -132,7 +132,7 @@ export function createWebhooksRouter(): Router {
 
         const existing = await prisma.webhookSubscription.findUnique({ where: { id } });
         if (!existing) {
-          res.status(404).json({ error: "Subscription not found" });
+          res.status(404).json({ error: "Subscription not found", code: "not_found" });
           return;
         }
 
@@ -165,7 +165,7 @@ export function createWebhooksRouter(): Router {
 
         const existing = await prisma.webhookSubscription.findUnique({ where: { id } });
         if (!existing) {
-          res.status(404).json({ error: "Subscription not found" });
+          res.status(404).json({ error: "Subscription not found", code: "not_found" });
           return;
         }
 

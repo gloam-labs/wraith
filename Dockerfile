@@ -30,6 +30,12 @@ RUN npm ci
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 
+# Copy the persisted-query allow-list: in production the GraphQL endpoint
+# only runs queries whose hash is in persisted-queries.json, resolved from
+# the working directory — without this a Docker deploy would refuse every
+# query even though the loader logic is correct.
+COPY --from=builder /app/persisted-queries.json ./persisted-queries.json
+
 # Generate the Prisma client into this stage's node_modules — the fresh `npm ci`
 # above installs @prisma/client but not the generated client, so the app crashed
 # on boot with "@prisma/client did not initialize yet".

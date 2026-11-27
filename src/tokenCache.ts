@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import { fetchTokenMetadata } from "./rpc";
 import { resolveNetwork, type Network } from "./network";
+import { tokenMetadataLookupsTotal } from "./metrics";
 
 export interface TokenMetadata {
   network: Network;
@@ -19,9 +20,17 @@ export interface TokenMetadata {
  * silently rescales every amount rendered from it.
  */
 const cache = new Map<string, TokenMetadata>();
+const inFlightLookups = new Map<string, Promise<TokenMetadata>>();
+const recentFailures = new Map<string, { failures: number; retryAt: number }>();
+const INITIAL_FAILURE_COOLDOWN_MS = 30 * 60 * 1000;
+const MAX_FAILURE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 function cacheKey(network: Network, contractId: string): string {
   return `${network}:${contractId}`;
+}
+
+function hasValidDecimals(metadata: { decimals: number }): boolean {
+  return Number.isInteger(metadata.decimals) && metadata.decimals >= 0 && metadata.decimals <= 38;
 }
 
 /**
@@ -35,7 +44,9 @@ export async function initTokenCache(network?: Network): Promise<void> {
   try {
     const tokens = await prisma.tokenMetadata.findMany({ where: { network: net } });
     for (const token of tokens) {
-      cache.set(cacheKey(net, token.contractId), token as TokenMetadata);
+      if (hasValidDecimals(token)) {
+        cache.set(cacheKey(net, token.contractId), token as TokenMetadata);
+      }
     }
     console.log(`[cache/${net}] Initialized with ${tokens.length} tokens from DB`);
   } catch (err) {
@@ -51,7 +62,7 @@ export async function initTokenCache(network?: Network): Promise<void> {
  * Get token metadata for a contract on a network.
  * Checks memory → then the database → then Soroban RPC.
  */
-export async function getTokenMetadata(
+export function getTokenMetadata(
   contractId: string,
   network?: Network,
 ): Promise<TokenMetadata> {
@@ -60,32 +71,79 @@ export async function getTokenMetadata(
 
   // 1. In-memory cache.
   const cached = cache.get(key);
-  if (cached) return cached;
-
-  // 2. Database — another process, or an earlier run, may already have it.
-  const dbToken = await prisma.tokenMetadata.findUnique({
-    where: { network_contractId: { network: net, contractId } },
-  });
-  if (dbToken) {
-    cache.set(key, dbToken as TokenMetadata);
-    return dbToken as TokenMetadata;
+  if (cached) {
+    tokenMetadataLookupsTotal.inc({ outcome: "hit" });
+    return Promise.resolve(cached);
   }
 
-  // 3. Soroban RPC. Asked of this network's endpoint rather than the process
-  // default: querying the wrong chain returns either nothing or another token.
-  console.log(`[cache/${net}] Cache miss for ${contractId} — fetching from RPC…`);
-  const metadata = await fetchTokenMetadata(contractId, net);
-  const token: TokenMetadata = { network: net, contractId, ...metadata };
+  const inFlight = inFlightLookups.get(key);
+  if (inFlight) return inFlight;
 
-  // 4. Persist to the database and memory.
-  await prisma.tokenMetadata.upsert({
-    where: { network_contractId: { network: net, contractId } },
-    create: token,
-    update: token,
+  const failure = recentFailures.get(key);
+  if (failure && Date.now() < failure.retryAt) {
+    tokenMetadataLookupsTotal.inc({ outcome: "skipped_recent_failure" });
+    return Promise.reject(new Error("Token metadata lookup temporarily suppressed"));
+  }
+
+  const lookup = (async (): Promise<TokenMetadata> => {
+    let rpcLookupFailed = false;
+    try {
+      // Another process, or an earlier run, may already have populated the DB.
+      const dbToken = await prisma.tokenMetadata.findUnique({
+        where: { network_contractId: { network: net, contractId } },
+      });
+      if (dbToken && hasValidDecimals(dbToken)) {
+        const token = dbToken as TokenMetadata;
+        cache.set(key, token);
+        recentFailures.delete(key);
+        tokenMetadataLookupsTotal.inc({ outcome: "hit" });
+        return token;
+      }
+
+      // Ask this network's endpoint rather than the process default.
+      let metadata: Awaited<ReturnType<typeof fetchTokenMetadata>>;
+      try {
+        metadata = await fetchTokenMetadata(contractId, net);
+        if (!hasValidDecimals(metadata)) {
+          throw new Error("Token metadata contains invalid decimals");
+        }
+      } catch (error) {
+        rpcLookupFailed = true;
+        throw error;
+      }
+      const token: TokenMetadata = { network: net, contractId, ...metadata };
+
+      recentFailures.delete(key);
+      await prisma.tokenMetadata.upsert({
+        where: { network_contractId: { network: net, contractId } },
+        create: token,
+        update: token,
+      });
+
+      cache.set(key, token);
+      tokenMetadataLookupsTotal.inc({ outcome: "miss" });
+      return token;
+    } catch (error) {
+      tokenMetadataLookupsTotal.inc({ outcome: "failed" });
+      if (rpcLookupFailed) {
+        const failures = (recentFailures.get(key)?.failures ?? 0) + 1;
+        const cooldown = Math.min(
+          INITIAL_FAILURE_COOLDOWN_MS * 2 ** (failures - 1),
+          MAX_FAILURE_COOLDOWN_MS,
+        );
+        recentFailures.set(key, { failures, retryAt: Date.now() + cooldown });
+      }
+      throw error;
+    }
+  })();
+
+  const sharedLookup = lookup.finally(() => {
+    if (inFlightLookups.get(key) === sharedLookup) {
+      inFlightLookups.delete(key);
+    }
   });
-
-  cache.set(key, token);
-  return token;
+  inFlightLookups.set(key, sharedLookup);
+  return sharedLookup;
 }
 
 /**
@@ -109,4 +167,6 @@ export function getCachedTokenDecimals(
 /** Test-only: drop the in-memory cache. */
 export function _resetTokenCache(): void {
   cache.clear();
+  inFlightLookups.clear();
+  recentFailures.clear();
 }

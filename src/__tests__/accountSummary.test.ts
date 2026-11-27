@@ -7,6 +7,8 @@
 
 import { createApp } from "../api";
 import supertest from "supertest";
+import { buildOpenApiDocument } from "../openapi/build";
+import { accountSummaryResponseSchema } from "../openapi/schemas";
 
 // ── Mock DB module ────────────────────────────────────────────────────────────
 jest.mock("../db", () => ({
@@ -68,6 +70,7 @@ describe("GET /accounts/:address/summary", () => {
     // Display amounts should be formatted with 7 decimals
     expect(asset.displayTotalSent).toBe("500.0000000");
     expect(asset.displayTotalReceived).toBe("1000.0000000");
+    expect(asset.displayNet).toBe("500.0000000");
   });
 
   it("returns empty assets array when address has no transfers", async () => {
@@ -151,5 +154,95 @@ describe("GET /accounts/:address/summary", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.assets).toHaveLength(2);
+  });
+
+  // ── #396: the spec must describe the body that is actually served ──────────
+
+  it("serves the body the generated spec describes", async () => {
+    getAccountSummary.mockResolvedValueOnce([
+      {
+        contractId:     CONTRACT,
+        totalSent:      "5000000000",
+        totalReceived:  "10000000000",
+        net:            "5000000000",
+        txCount:        3,
+        lastActivityAt: new Date("2024-06-01T00:00:00Z"),
+      },
+    ]);
+
+    const res = await supertest(app).get(`/accounts/${ALICE}/summary`);
+
+    expect(res.status).toBe(200);
+    // The route's own schema accepts what the route returns.
+    expect(accountSummaryResponseSchema.safeParse(res.body).success).toBe(true);
+
+    const summary = buildOpenApiDocument().paths?.["/accounts/{address}/summary"]?.get;
+    const schema = summary?.responses?.[200]?.content?.["application/json"]
+      ?.schema as unknown;
+
+    // The fields the client receives, and only those. Before this the spec
+    // pointed at /summary/{address}'s response, which describes `window` and
+    // `tokens` — fields no caller of this route ever sees.
+    expect(typeof schema).toBe("object");
+    expect((schema as { $ref?: string }).$ref).toBeUndefined();
+    expect(Object.keys((schema as { properties: object }).properties).sort()).toEqual([
+      "address",
+      "assets",
+    ]);
+    expect((schema as { required: string[] }).required).toEqual(["address", "assets"]);
+    expect(res.body).not.toHaveProperty("window");
+    expect(res.body).not.toHaveProperty("tokens");
+
+    const windowed = buildOpenApiDocument().paths?.["/summary/{address}"]?.get;
+    const windowedSchema = windowed?.responses?.[200]?.content?.["application/json"]
+      ?.schema as { properties?: Record<string, unknown> };
+    expect(Object.keys(windowedSchema?.properties ?? {})).toContain("tokens");
+  });
+
+  it("accepts unrelated query parameters from installed apps", async () => {
+    getAccountSummary.mockResolvedValueOnce([]);
+
+    const res = await supertest(app)
+      .get(`/accounts/${ALICE}/summary`)
+      .query({ clientVersion: "1.2.3", futureFlag: "on" });
+
+    expect(res.status).toBe(200);
+    expect(getAccountSummary).toHaveBeenLastCalledWith(ALICE, undefined, "testnet");
+  });
+
+  it.each(["fromDate", "toDate"])("refuses %s because it cannot honour a date window", async (parameter) => {
+    // Deliberately does not re-arm the mock: nothing should reach it.
+    const callsBefore = getAccountSummary.mock.calls.length;
+
+    const res = await supertest(app)
+      .get(`/accounts/${ALICE}/summary`)
+      .query({ [parameter]: "2024-01-01T00:00:00.000Z" });
+
+    // The rollup holds one all-time row per asset. Returning every month for a
+    // request that asked for one is the failure; 400 is the honest answer.
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain(parameter);
+    expect(getAccountSummary.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("renders a negative net as a signed decimal, not a note", async () => {
+    const CONTRACT2 = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+    getAccountSummary.mockResolvedValueOnce([
+      {
+        contractId:     CONTRACT2,
+        totalSent:      "500",
+        totalReceived:  "0",
+        net:            "-500",
+        txCount:        1,
+        lastActivityAt: new Date("2024-06-01T00:00:00Z"),
+      },
+    ]);
+
+    const res = await supertest(app).get(`/accounts/${ALICE}/summary`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.assets[0].net).toBe("-500");
+    expect(res.body.assets[0].displayNet).toBe("-0.0000500");
+    expect(accountSummaryResponseSchema.safeParse(res.body).success).toBe(true);
   });
 });

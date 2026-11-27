@@ -109,14 +109,93 @@ async function hasRowsBeyond(where: Record<string, unknown>, max: number): Promi
   return beyond.length > 0;
 }
 
+// ── Shared: client disconnect & backpressure helpers (#399) ───────────────────
+
+/**
+ * Track premature client disconnection on a streaming HTTP response.
+ *
+ * We listen to `res`'s `"close"` (guarded by `!res.writableEnded`) rather than
+ * `req`'s `"close"` alone because Node 16+ fires `req`'s `"close"` as soon as
+ * the request body finishes — immediately on GET requests, even while the
+ * client is still reading the response.
+ */
+function trackClientDisconnect(
+  req: Request,
+  res: Response,
+): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+
+  const onDisconnect = () => {
+    if (!res.writableEnded && !controller.signal.aborted) {
+      controller.abort();
+    }
+  };
+
+  if (res.destroyed && !res.writableEnded) {
+    controller.abort();
+  }
+
+  req.on("aborted", onDisconnect);
+  res.on("close", onDisconnect);
+  res.on("error", onDisconnect);
+
+  const cleanup = () => {
+    req.off("aborted", onDisconnect);
+    res.off("close", onDisconnect);
+    res.off("error", onDisconnect);
+  };
+
+  return { signal: controller.signal, cleanup };
+}
+
+/**
+ * Wait for `stream` to drain when `.write()` returns `false`, waking up
+ * immediately if the client disconnects (`signal` aborts) or `stream` closes
+ * so a slow or vanished client can neither buffer unboundedly nor hang the loop.
+ */
+function waitForDrainOrAbort(
+  stream: NodeJS.WritableStream & { destroyed?: boolean; writableEnded?: boolean },
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (signal.aborted || stream.destroyed || stream.writableEnded) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise<boolean>((resolve) => {
+    const cleanup = () => {
+      stream.off("drain", onDrain);
+      stream.off("close", onStop);
+      stream.off("error", onStop);
+      signal.removeEventListener("abort", onStop);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve(!signal.aborted);
+    };
+    const onStop = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    stream.once("drain", onDrain);
+    stream.once("close", onStop);
+    stream.once("error", onStop);
+    signal.addEventListener("abort", onStop, { once: true });
+  });
+}
+
 // ── Shared: async generator that yields rows in batches via cursor ────────────
-// Stops once `limit` rows have been yielded so callers never pull more than
-// they asked for regardless of DB size.
-async function* streamTransfers(where: Record<string, unknown>, limit: number) {
+// Stops once `limit` rows have been yielded or `signal` aborts so callers never
+// pull more than they asked for or keep querying after a client disconnects.
+async function* streamTransfers(
+  where: Record<string, unknown>,
+  limit: number,
+  signal?: AbortSignal,
+) {
   let lastId: number | undefined = undefined;
   let yielded = 0;
 
-  while (yielded < limit) {
+  while (yielded < limit && !signal?.aborted) {
     const take = Math.min(BATCH_SIZE, limit - yielded);
 
     const rows: Awaited<ReturnType<typeof prisma.tokenTransfer.findMany>> =
@@ -127,9 +206,10 @@ async function* streamTransfers(where: Record<string, unknown>, limit: number) {
         ...(lastId !== undefined ? { cursor: { id: lastId }, skip: 1 } : {}),
       });
 
-    if (rows.length === 0) break;
+    if (signal?.aborted || rows.length === 0) break;
 
     for (const row of rows) {
+      if (signal?.aborted) return;
       yield row;
       yielded++;
     }
@@ -141,16 +221,22 @@ async function* streamTransfers(where: Record<string, unknown>, limit: number) {
 
 // ── CSV endpoint ──────────────────────────────────────────────────────────────
 async function handleCsvExport(req: Request, res: Response, next: NextFunction) {
-  try {
-    const parsed = parseOr400(exportQuerySchema, req.query, res);
-    if (!parsed) return;
+  const parsed = parseOr400(exportQuerySchema, req.query, res);
+  if (!parsed) return;
 
+  const { signal, cleanup: cleanupAbort } = trackClientDisconnect(req, res);
+  let csvStream: ReturnType<typeof csvFormat> | undefined;
+  let onAbort: (() => void) | undefined;
+
+  try {
     const effectiveMax = parsed.maxRows ?? DEFAULT_MAX_ROWS;
     const network = requestNetwork(req);
     const where = buildWhere(parsed, network);
 
     // Before a single byte: once the body starts, headers can no longer be set.
+    if (signal.aborted) return;
     const truncated = await hasRowsBeyond(where, effectiveMax);
+    if (signal.aborted) return;
 
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", "attachment; filename=\"transfers.csv\"");
@@ -160,11 +246,25 @@ async function handleCsvExport(req: Request, res: Response, next: NextFunction) 
       res.setHeader("X-Row-Limit", String(effectiveMax));
     }
 
-    const csvStream = csvFormat({ headers: true });
-    csvStream.pipe(res);
+    csvStream = csvFormat({ headers: true });
+    const activeCsv = csvStream;
+    const csvFinished = finished(activeCsv);
+    // Abort or premature close can reject csvFinished before we await it.
+    void csvFinished.catch(() => {});
 
-    for await (const row of streamTransfers(where, effectiveMax)) {
-      csvStream.write({
+    onAbort = () => {
+      activeCsv.unpipe(res);
+      if (!activeCsv.destroyed) {
+        activeCsv.destroy();
+      }
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    activeCsv.pipe(res);
+
+    for await (const row of streamTransfers(where, effectiveMax, signal)) {
+      if (signal.aborted) break;
+
+      const canContinue = activeCsv.write({
         id:             row.id,
         contractId:     row.contractId,
         eventType:      row.eventType,
@@ -179,16 +279,41 @@ async function handleCsvExport(req: Request, res: Response, next: NextFunction) 
         isSac:          row.isSac ?? false,
         createdAt:      row.createdAt.toISOString(),
       });
+
+      if (!canContinue) {
+        const drained = await waitForDrainOrAbort(activeCsv, signal);
+        if (!drained) break;
+      }
     }
 
-    csvStream.end();
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+
+    activeCsv.end();
+    await csvFinished.catch(() => {});
   } catch (err) {
-    next(err);
+    if (csvStream && !csvStream.destroyed) {
+      csvStream.unpipe(res);
+      csvStream.destroy();
+    }
+    if (!signal.aborted) {
+      next(err);
+    }
+  } finally {
+    if (onAbort) {
+      signal.removeEventListener("abort", onAbort);
+    }
+    cleanupAbort();
   }
 }
 
 // ── Parquet endpoint ──────────────────────────────────────────────────────────
 async function handleParquetExport(req: Request, res: Response, next: NextFunction) {
+  const parsed = parseOr400(exportQuerySchema, req.query, res);
+  if (!parsed) return;
+
   // parquetjs-lite is a CommonJS module — require() avoids ESM interop issues
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const parquet = require("parquetjs-lite");
@@ -197,13 +322,31 @@ async function handleParquetExport(req: Request, res: Response, next: NextFuncti
     os.tmpdir(),
     `transfers-${Date.now()}-${Math.random().toString(36).slice(2)}.parquet`,
   );
+  const { signal, cleanup: cleanupAbort } = trackClientDisconnect(req, res);
   let outputStream: fs.WriteStream | undefined;
   let outputClosed: Promise<void> | undefined;
+  let fileStream: fs.ReadStream | undefined;
+  let fileClosed: Promise<void> | undefined;
+
+  const cleanupTempResources = async () => {
+    if (fileStream && !fileStream.destroyed) {
+      fileStream.unpipe(res);
+      fileStream.destroy();
+    }
+    if (fileClosed) {
+      await fileClosed;
+    }
+    // Let the writer's initial header write finish before releasing the file.
+    if (outputStream && !outputStream.destroyed && !outputStream.writableEnded) {
+      outputStream.end();
+    }
+    if (outputClosed) {
+      await outputClosed;
+    }
+    await fs.promises.unlink(tmpFile).catch(() => {});
+  };
 
   try {
-    const parsed = parseOr400(exportQuerySchema, req.query, res);
-    if (!parsed) return;
-
     const effectiveMax = parsed.maxRows ?? DEFAULT_MAX_ROWS;
     const network = requestNetwork(req);
     const where = buildWhere(parsed, network);
@@ -227,19 +370,29 @@ async function handleParquetExport(req: Request, res: Response, next: NextFuncti
     // Headers are set after the file is written here, so this could have been
     // detected mid-stream — but it goes through the same helper as CSV so the
     // two endpoints cannot answer differently about the same query.
+    if (signal.aborted) return;
     const truncated = await hasRowsBeyond(where, effectiveMax);
+    if (signal.aborted) return;
 
-    // Own the stream so a query, row, or footer failure can close it without
-    // calling close() a second time on a partially closed Parquet writer.
+    // Own the stream so a query, row, footer failure, or client disconnect can
+    // close it without calling close() a second time on a partially closed writer.
     outputStream = fs.createWriteStream(tmpFile);
     outputClosed = new Promise<void>((resolve) => outputStream!.once("close", resolve));
     const outputFinished = finished(outputStream);
     // Writer operations can fail before we reach the completion await below.
     void outputFinished.catch(() => {});
     await once(outputStream, "open");
+
+    if (signal.aborted) {
+      await cleanupTempResources();
+      return;
+    }
+
     const writer = await parquet.ParquetWriter.openStream(schema, outputStream);
 
-    for await (const row of streamTransfers(where, effectiveMax)) {
+    for await (const row of streamTransfers(where, effectiveMax, signal)) {
+      if (signal.aborted) break;
+
       await writer.appendRow({
         id:             row.id,
         contractId:     row.contractId,
@@ -255,10 +408,22 @@ async function handleParquetExport(req: Request, res: Response, next: NextFuncti
         isSac:          row.isSac ?? null,
         createdAt:      row.createdAt.toISOString(),
       });
+
+      if (signal.aborted) break;
+    }
+
+    if (signal.aborted) {
+      await cleanupTempResources();
+      return;
     }
 
     await writer.close();
     await outputFinished;
+
+    if (signal.aborted) {
+      await cleanupTempResources();
+      return;
+    }
 
     res.setHeader("Content-Type", "application/octet-stream");
     res.setHeader("Content-Disposition", "attachment; filename=\"transfers.parquet\"");
@@ -267,21 +432,33 @@ async function handleParquetExport(req: Request, res: Response, next: NextFuncti
       res.setHeader("X-Row-Limit", String(effectiveMax));
     }
 
-    const fileStream = fs.createReadStream(tmpFile);
-    fileStream.pipe(res);
-    fileStream.on("end", () => fs.unlink(tmpFile, () => {}));
-    fileStream.on("error", (err) => {
-      fs.unlink(tmpFile, () => {});
-      next(err);
-    });
-  } catch (err) {
-    // Let the writer's initial header write finish before releasing the file.
-    if (outputStream && !outputStream.destroyed && !outputStream.writableEnded) {
-      outputStream.end();
+    fileStream = fs.createReadStream(tmpFile);
+    const activeReadStream = fileStream;
+    fileClosed = new Promise<void>((resolve) => activeReadStream.once("close", resolve));
+    const onAbortDuringPipe = () => {
+      activeReadStream.unpipe(res);
+      if (!activeReadStream.destroyed) {
+        activeReadStream.destroy();
+      }
+    };
+    signal.addEventListener("abort", onAbortDuringPipe, { once: true });
+
+    activeReadStream.pipe(res);
+    try {
+      await finished(activeReadStream);
+    } finally {
+      signal.removeEventListener("abort", onAbortDuringPipe);
     }
-    await outputClosed;
+
+    await fileClosed;
     await fs.promises.unlink(tmpFile).catch(() => {});
-    next(err);
+  } catch (err) {
+    await cleanupTempResources();
+    if (!signal.aborted) {
+      next(err);
+    }
+  } finally {
+    cleanupAbort();
   }
 }
 

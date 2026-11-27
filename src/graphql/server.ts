@@ -1,5 +1,6 @@
 import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@as-integrations/express5";
+import { GraphQLError } from "graphql";
 import {
   queryAllTransfers,
   queryByTxHash,
@@ -7,11 +8,14 @@ import {
   queryTransfers,
 } from "../db";
 import { costLimitPlugin } from "./costLimit";
+import { formatGraphQLError } from "./formatError";
 import { persistedQueryPlugin } from "./persisted";
 import { requestNetwork } from "../middleware/network";
 import { enabledNetworks, isNetwork, NETWORKS, currentNetwork, type Network } from "../network";
 import { getCachedTokenDecimals } from "../tokenCache";
 import { toDisplayAmount } from "../amount";
+import { transferQuerySchema } from "../openapi/schemas";
+import { decodeCursor } from "../lib/odata";
 
 export const typeDefs = `#graphql
   enum Network {
@@ -31,6 +35,7 @@ export const typeDefs = `#graphql
   }
 
   type Transfer {
+    id: Int!
     contractId: String!
     eventType: String!
     fromAddress: String
@@ -57,6 +62,9 @@ export const typeDefs = `#graphql
     totalReceived: String!
     totalSent: String!
     netFlow: String!
+    displayTotalReceived: String!
+    displayTotalSent: String!
+    displayNetFlow: String!
     txCount: Int!
   }
 
@@ -71,6 +79,20 @@ export const typeDefs = `#graphql
       offset: Int = 0
       "Also compute the exact total. Slower on large result sets."
       includeTotal: Boolean = false
+      "Opaque cursor from a previous page's nextCursor. Pass it back unchanged to continue; a malformed cursor is an error, not a silent first page."
+      cursor: String
+      "Inclusive lower bound on ledger."
+      fromLedger: Int
+      "Inclusive upper bound on ledger."
+      toLedger: Int
+      "Inclusive lower bound on ledgerClosedAt (ISO 8601 with offset, e.g. 2025-01-01T00:00:00Z)."
+      fromDate: String
+      "Inclusive upper bound on ledgerClosedAt (ISO 8601 with offset)."
+      toDate: String
+      "Only transfers whose eventType is one of these (transfer, mint, burn, clawback)."
+      eventTypes: [String!]
+      "Filter to a specific token contract, as contractId does."
+      token: String
     ): TransferConnection!
     transferByTx(txHash: String!, network: Network): [Transfer!]!
     summary(address: String!, contractId: String, network: Network): [TokenSummary!]!
@@ -97,22 +119,111 @@ export interface GraphQLContext {
  * than returning nothing: an empty list would read as "no such transfers"
  * instead of "this process has never indexed that chain".
  */
+/**
+ * A deliberate client error from a resolver. The BAD_USER_INPUT code is
+ * load-bearing: formatGraphQLError masks every error that arrives without
+ * a code of its own (Apollo stamps those INTERNAL_SERVER_ERROR) as a server
+ * fault, so an un-coded throw here would be hidden from the caller it was
+ * written for.
+ */
+function badUserInput(message: string): GraphQLError {
+  return new GraphQLError(message, { extensions: { code: "BAD_USER_INPUT" } });
+}
+
 function resolveArgNetwork(arg: NetworkArg | undefined, ctx: GraphQLContext | undefined): Network {
   if (arg === undefined) return ctx?.network ?? currentNetwork();
 
   const normalised = arg.toLowerCase();
   if (!isNetwork(normalised)) {
-    throw new Error(`Invalid network: "${arg}". Valid values: ${NETWORKS.join(", ")}.`);
+    throw badUserInput(`Invalid network: "${arg}". Valid values: ${NETWORKS.join(", ")}.`);
   }
 
   const enabled = enabledNetworks();
   if (!enabled.includes(normalised)) {
-    throw new Error(
+    throw badUserInput(
       `Network "${normalised}" is not enabled on this deployment. Enabled networks: ${enabled.join(", ")}.`
     );
   }
 
   return normalised;
+}
+
+export interface TransfersArgs {
+  address: string;
+  direction?: TransferDirection;
+  contractId?: string | null;
+  network?: NetworkArg;
+  limit?: number | null;
+  offset?: number | null;
+  includeTotal?: boolean | null;
+  cursor?: string | null;
+  fromLedger?: number | null;
+  toLedger?: number | null;
+  fromDate?: string | null;
+  toDate?: string | null;
+  eventTypes?: string[] | null;
+  token?: string | null;
+}
+
+/**
+ * Validate `transfers` arguments the way the REST transfer routes do (#405):
+ * the same zod schema (`transferQuerySchema`) enforces limit 1–200, ledger
+ * bounds >= 0, ISO datetimes with an offset, and the event-type vocabulary.
+ * GraphQL already types the values, so the schema is fed the decoded values
+ * (eventTypes joined back into the comma-separated form REST parses).
+ *
+ * Two deliberate differences from REST:
+ * - `token` is passed through unchecked, like `contractId` (which REST also
+ *   leaves unchecked); REST's strict contract-address regex for `token` would
+ *   reject the short fixture ids the data layer itself accepts.
+ * - `eventTypes` are lower-cased before validation: GraphQL callers write
+ *   enum-style `TRANSFER`, REST's vocabulary is lowercase `transfer`, and both
+ *   mean the same filter. Anything outside the vocabulary still errors.
+ *
+ * A malformed `cursor` is an error, not a silent first page: the data layer's
+ * `decodeCursor` swallows bad cursors so REST can fall back cleanly, but a
+ * GraphQL client that hands back a `nextCursor` it was given has no fallback
+ * to fall back to — silently restarting the list would loop forever.
+ */
+function parseTransfersArgs(args: TransfersArgs) {
+  const eventTypes = args.eventTypes
+    ?.map((eventType) => eventType.trim().toLowerCase())
+    .filter(Boolean);
+  const parsed = transferQuerySchema.safeParse({
+    address: args.address,
+    contractId: args.contractId ?? undefined,
+    fromLedger: args.fromLedger ?? undefined,
+    toLedger: args.toLedger ?? undefined,
+    fromDate: args.fromDate ?? undefined,
+    toDate: args.toDate ?? undefined,
+    eventType: eventTypes?.length ? eventTypes.join(",") : undefined,
+    limit: args.limit ?? undefined,
+    offset: args.offset ?? undefined,
+    cursor: args.cursor ?? undefined,
+    includeTotal: args.includeTotal ?? undefined,
+  });
+  if (!parsed.success) {
+    throw badUserInput(
+      `Invalid transfers arguments: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+    );
+  }
+
+  const cursor = parsed.data.cursor?.trim() || undefined;
+  if (cursor !== undefined) {
+    const cursorId = decodeCursor(cursor);
+    if (cursorId === undefined || !Number.isInteger(cursorId) || cursorId <= 0) {
+      throw badUserInput(
+        `Invalid cursor: "${args.cursor}". Pass back the nextCursor from a previous page.`,
+      );
+    }
+  }
+
+  return {
+    ...parsed.data,
+    cursor,
+    eventTypes: parsed.data.eventType,
+    token: args.token?.trim() || undefined,
+  };
 }
 
 export function formatTransfer(row: Record<string, unknown>) {
@@ -131,25 +242,25 @@ export const resolvers = {
 
     transfers: async (
       _parent: unknown,
-      args: {
-        address: string;
-        direction: TransferDirection;
-        contractId?: string;
-        network?: NetworkArg;
-        limit?: number;
-        offset?: number;
-        includeTotal?: boolean;
-      },
+      args: TransfersArgs,
       ctx?: GraphQLContext
     ) => {
+      const validated = parseTransfersArgs(args);
       const common = {
         network: resolveArgNetwork(args.network, ctx),
         tokenDecimals: getCachedTokenDecimals,
         address: args.address,
-        contractId: args.contractId,
-        limit: args.limit,
-        offset: args.offset,
-        includeTotal: args.includeTotal,
+        contractId: args.contractId ?? undefined,
+        token: validated.token,
+        cursor: validated.cursor,
+        fromLedger: validated.fromLedger,
+        toLedger: validated.toLedger,
+        fromDate: validated.fromDate,
+        toDate: validated.toDate,
+        eventTypes: validated.eventTypes,
+        limit: validated.limit,
+        offset: validated.offset,
+        includeTotal: validated.includeTotal,
       };
 
       const result =
@@ -190,20 +301,28 @@ export const resolvers = {
       args: { address: string; contractId?: string; network?: NetworkArg },
       ctx?: GraphQLContext
     ) => {
+      const network = resolveArgNetwork(args.network, ctx);
       const rows = await querySummary({
         address: args.address,
         contractId: args.contractId,
-        network: resolveArgNetwork(args.network, ctx),
+        network,
       });
       return rows.map((row) => {
         const received = BigInt(row.totalReceived);
         const sent = BigInt(row.totalSent);
+        const net = received - sent;
+        // Same display conversion as the REST summaryHandler in src/api.ts:
+        // raw (integer) totals scaled by the token's cached decimals.
+        const decimals = getCachedTokenDecimals(row.contractId, network);
 
         return {
           contractId: row.contractId,
           totalReceived: row.totalReceived,
           totalSent: row.totalSent,
-          netFlow: (received - sent).toString(),
+          netFlow: net.toString(),
+          displayTotalReceived: toDisplayAmount(row.totalReceived, decimals),
+          displayTotalSent: toDisplayAmount(row.totalSent, decimals),
+          displayNetFlow: toDisplayAmount(net.toString(), decimals),
           txCount: Number(row.txCount),
         };
       });
@@ -221,6 +340,10 @@ export function createGraphQLMiddleware() {
     typeDefs,
     resolvers,
     persistedQueries: false,
+    // Only the plugins' refusals (and other coded, deliberate client
+    // errors) reach the client with their real message; a genuinely
+    // unexpected failure is masked as "Internal server error" (#404).
+    formatError: formatGraphQLError,
     plugins: [
       persistedQueryPlugin,
       costLimitPlugin({

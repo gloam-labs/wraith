@@ -1,3 +1,5 @@
+import { endingsOf, statusWords, type ProviderEnding } from "./providerStatus";
+
 /**
  * The order status as sent to wallet apps.
  *
@@ -16,15 +18,24 @@
  * `providerStatus`.
  */
 export function statusForClients(status: string): string {
-  const s = status.toLowerCase();
-  const legacyTerminal = ["settled", "disbursed", "failed", "timeout"].some((w) => s.includes(w));
-  if (legacyTerminal) return status;
-  if (s.includes("expire")) return `${status} (timeout)`;
-  if (s.includes("refund") || s.includes("cancel") || s.includes("revers")) {
+  // Only a real ending is ever re-worded. A status that is still moving
+  // ("refund_pending", "cancel_requested") or that no rule knows goes out
+  // exactly as the provider sent it, so an app never finishes an order that
+  // has not ended (#418).
+  const endings = endingsOf(status);
+  if (endings.length === 0) return status;
+
+  // Already carries a word installed apps finish on: leave it alone.
+  if (endings.some((e) => APP_FINISHES_ON.includes(e))) return status;
+  if (endings.includes("expired")) return `${status} (timeout)`;
+  if (endings.some((e) => e === "refunded" || e === "cancelled" || e === "reversed")) {
     return `${status} (failed)`;
   }
   return status;
 }
+
+/** The endings installed apps already treat as finished. */
+const APP_FINISHES_ON: readonly ProviderEnding[] = ["settled", "disbursed", "failed", "timeout"];
 
 /**
  * The same translation for the **bills** rail, which speaks a second dialect.
@@ -47,10 +58,19 @@ export function statusForClients(status: string): string {
  * `providerStatus`, so nothing is lost for a newer client or a human reading it.
  */
 export function billStatusForClients(status: string): string {
-  const s = status.toLowerCase();
-  const alreadyUnderstood = /complete|success|deliver/.test(s);
-  if (!alreadyUnderstood && /settled|disbursed/.test(s)) {
-    return `${status} (completed)`;
-  }
+  const endings = endingsOf(status);
+  const paidOut = endings.includes("settled") || endings.includes("disbursed");
+  const alreadyUnderstood = statusWords(status).some((w) => BILLS_SCREEN_WINS.includes(w));
+  if (paidOut && !alreadyUnderstood) return `${status} (completed)`;
   return statusForClients(status);
 }
+
+/** Words the bills screen already ends on as a win. */
+const BILLS_SCREEN_WINS: readonly string[] = [
+  "complete",
+  "completed",
+  "success",
+  "successful",
+  "deliver",
+  "delivered",
+];

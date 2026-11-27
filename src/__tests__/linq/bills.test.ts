@@ -122,6 +122,22 @@ describe('payBill', () => {
     expect((global.fetch as jest.Mock).mock.calls).toHaveLength(0);
   });
 
+  // #462: these are our refusals, not the provider's. A 400 with no code falls
+  // through to `provider_rejected` in the route layer, which blames Linq for a
+  // request it was never asked.
+  it.each([
+    ['amountNgn', { amountNgn: 0 }],
+    ['amountStableCoin', { amountStableCoin: 0 }],
+    ['rate', { rate: 0 }],
+    ['refundAddress', { refundAddress: '' }],
+  ])('gives its own %s refusal the invalid_request code', async (_label, override) => {
+    global.fetch = jest.fn() as never;
+    const err = await payBill({ ...base, ...override, coin: 'xlm' }).catch((e) => e);
+    expect(err).toBeInstanceOf(LinqError);
+    expect(err.code).toBe('invalid_request');
+    expect((global.fetch as jest.Mock).mock.calls).toHaveLength(0);
+  });
+
   it('authenticates with the business key, never a consumer token', async () => {
     global.fetch = jest.fn().mockResolvedValue(OK(ORDER)) as never;
     await payBill({ ...base, coin: 'xlm' });

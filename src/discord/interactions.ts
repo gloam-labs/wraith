@@ -305,7 +305,7 @@ export function createDiscordInteractionsRouter(): Router {
       raw,
     );
     if (!signed) {
-      res.status(401).json({ error: "invalid request signature" });
+      res.status(401).json({ error: "invalid request signature", code: "unauthorized" });
       return;
     }
 
@@ -313,7 +313,7 @@ export function createDiscordInteractionsRouter(): Router {
     try {
       interaction = JSON.parse(raw.toString("utf8")) as Interaction;
     } catch {
-      res.status(400).json({ error: "unreadable interaction" });
+      res.status(400).json({ error: "unreadable interaction", code: "invalid_request" });
       return;
     }
 

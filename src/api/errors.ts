@@ -62,6 +62,7 @@ import { ORIGIN_NOT_ALLOWED } from "../middleware/cors";
  * | `invalid_nin_format` | A NIN is not 11 digits (ours or the provider's check). |
  * | `idempotency_conflict` | The idempotency key was used for a different request. |
  * | `unauthorized` | An order access token is missing or unusable. |
+ * | `forbidden` | The caller is authenticated but not allowed (403). |
  * | `order_not_found` | No such order, or the token is not its. |
  * | `provider_rejected` | The provider refused (4xx) with no usable code. |
  * | `provider_error` | The provider failed (5xx) with no usable code. |
@@ -86,6 +87,7 @@ export const RAIL_ERROR_CODES = [
   "invalid_nin_format",
   "idempotency_conflict",
   "unauthorized",
+  "forbidden",
   "order_not_found",
   "provider_rejected",
   "provider_error",

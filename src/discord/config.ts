@@ -162,3 +162,31 @@ export function thresholds(): Thresholds {
 export function recheckIntervalMs(): number {
   return positiveInt("DISCORD_RECHECK_INTERVAL_MS", 24 * 60 * 60 * 1000);
 }
+
+/**
+ * How often the job looks for members whose last attempt is overdue.
+ *
+ * This is the tick, not the interval: a member is due when their own
+ * `lastAttemptAt` is older than {@link recheckIntervalMs}. Fifteen minutes
+ * means a restart costs at most a quarter of an hour of lateness instead of a
+ * whole day, and it is short enough that a deploy a day can no longer mean the
+ * check never runs at all.
+ */
+export function recheckTickMs(): number {
+  return positiveInt("DISCORD_RECHECK_TICK_MS", 15 * 60 * 1000);
+}
+
+/** How long a member is left alone after the member-gone check count is reached. */
+export function absentRecheckIntervalMs(): number {
+  return positiveInt("DISCORD_ABSENT_RECHECK_INTERVAL_MS", 7 * 24 * 60 * 60 * 1000);
+}
+
+/** Consecutive "member is gone" checks before a member is only checked weekly. */
+export function absentChecksBeforeBackoff(): number {
+  return positiveInt("DISCORD_ABSENT_CHECKS_BEFORE_BACKOFF", 3);
+}
+
+/** The longest a repeatedly failing member waits between attempts. */
+export function maxFailureBackoffMs(): number {
+  return positiveInt("DISCORD_MAX_FAILURE_BACKOFF_MS", 24 * 60 * 60 * 1000);
+}

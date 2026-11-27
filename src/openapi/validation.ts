@@ -3,7 +3,7 @@ import type { ZodTypeAny } from "zod";
 
 export function sendValidationError(res: Response, error: { issues: Array<{ message: string }> }): void {
   const message = error.issues[0]?.message ?? "Invalid request";
-  res.status(400).json({ error: message });
+  res.status(400).json({ error: message, code: "invalid_request" });
 }
 
 export function parseOr400<T extends ZodTypeAny>(

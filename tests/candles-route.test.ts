@@ -162,7 +162,7 @@ describe("candles routes through createApp", () => {
     const res = await request(app).get(`/candles/1m/${CONTRACT}`);
 
     expect(res.status).toBe(500);
-    expect(res.body).toEqual({ error: "Failed to query candles" });
+    expect(res.body).toEqual({ error: "Failed to query candles", code: "internal_error" });
     expect(res.text).not.toContain(SECRET);
     expect(errorLog.mock.calls.flat()).not.toContain(databaseError);
     expect(inspect(errorLog.mock.calls, { depth: null })).not.toContain(SECRET);

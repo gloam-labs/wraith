@@ -10,6 +10,7 @@ import { toDisplayAmount } from "./amount";
 // indexer loop (#161) and the API selector (#163) pass it explicitly.
 
 export { toDisplayAmount } from "./amount";
+export { withReadReplicas, withPrimary, disconnectReplicas } from "./db/router";
 
 import { withReadReplicas } from "./db/router";
 import { observeDbQuery } from "./metrics";
@@ -200,6 +201,45 @@ export async function upsertTransfers(
   );
 
   return result.count;
+}
+
+/**
+ * Idempotently insert a batch of transfer events and return only the records
+ * that were newly persisted (#367).
+ *
+ * Uses a single `INSERT ... ON CONFLICT DO NOTHING RETURNING "eventId"`
+ * statement via Prisma's `createManyAndReturn` so downstream steps
+ * (`upsertAccountSummaries`, live emitters) operate exclusively on rows that
+ * actually entered `TokenTransfer`, preventing double-counting and duplicate
+ * notifications on overlapping replays without extra round-trips.
+ */
+export async function upsertTransfersReturning(
+  records: TransferRecord[],
+  network?: Network
+): Promise<TransferRecord[]> {
+  if (records.length === 0) return [];
+  const net = resolveNetwork(network);
+
+  const inserted = await observeDbQuery("upsertTransfersReturning", () =>
+    prisma.tokenTransfer.createManyAndReturn({
+      data: records.map((r) => ({ ...r, network: net })),
+      skipDuplicates: true,
+      select: { eventId: true },
+    })
+  );
+
+  if (inserted.length === 0) return [];
+
+  // Consume each returned eventId once so duplicate eventIds within the same
+  // batch are only forwarded once, matching Postgres ON CONFLICT DO NOTHING.
+  const insertedIds = new Set(inserted.map((row) => row.eventId));
+  const insertedRecords: TransferRecord[] = [];
+  for (const record of records) {
+    if (insertedIds.delete(record.eventId)) {
+      insertedRecords.push(record);
+    }
+  }
+  return insertedRecords;
 }
 
 // ─── Indexer state helpers ─────────────────────────────────────────────────
@@ -758,13 +798,24 @@ export async function getNftOwner(
 // ─── Account summary helpers ───────────────────────────────────────────────
 
 /**
+ * Pairs per multi-row `INSERT`. Eight bound parameters per row keeps one
+ * statement far below Postgres's 65535-parameter limit, while a 1,000-address
+ * batch — the size a busy ledger produces — is still a single statement.
+ */
+export const ACCOUNT_SUMMARY_CHUNK_SIZE = 1000;
+
+/**
  * Incrementally update materialized aggregates for every address touched by
  * `records`. Called inside the same logical write as upsertTransfers so the
  * two tables never diverge.
  *
  * Strategy:
- *   1. Accumulate per-(address, contractId) deltas in memory.
- *   2. Emit one raw UPSERT per unique pair — O(unique addresses) DB round-trips.
+ *   1. Accumulate per-(address, contractId) deltas in memory, so each pair
+ *      appears exactly once — Postgres rejects an `ON CONFLICT DO UPDATE` that
+ *      touches the same row twice in one statement.
+ *   2. Emit a multi-row raw UPSERT for each fixed-size chunk of pairs, all
+ *      inside one transaction, so a batch either applies completely or not at
+ *      all.
  *
  * Using raw SQL because Prisma cannot do arithmetic on string-typed NUMERIC columns.
  */
@@ -802,31 +853,39 @@ export async function upsertAccountSummaries(
     if (toAddress)   touch(toAddress,   contractId, 0n, amt, ledgerClosedAt);
   }
 
-  for (const { address, contractId, sent, received, count, lastAt } of deltas.values()) {
-    const sentStr     = sent.toString();
-    const receivedStr = received.toString();
-    const netStr      = (received - sent).toString();
+  const pairs = [...deltas.values()];
+  const statements: Prisma.Sql[] = [];
+
+  for (let i = 0; i < pairs.length; i += ACCOUNT_SUMMARY_CHUNK_SIZE) {
+    const rows = pairs
+      .slice(i, i + ACCOUNT_SUMMARY_CHUNK_SIZE)
+      .map(
+        ({ address, contractId, sent, received, count, lastAt }) =>
+          Prisma.sql`(${networkName}, ${address}, ${contractId}, ${sent.toString()}, ${received.toString()}, ${(received - sent).toString()}, ${count}, ${lastAt}, NOW())`
+      );
 
     // The ON CONFLICT target must name the same columns as the unique index,
     // which #159 widened to (network, address, contractId). Leaving the old
     // two-column target here would raise
     // "no unique or exclusion constraint matching the ON CONFLICT specification"
     // on every write, not merely mis-scope the aggregate.
-    await prisma.$executeRaw`
+    statements.push(Prisma.sql`
       INSERT INTO wraith."AccountSummary"
         ("network", address, "contractId", "totalSent", "totalReceived", net, "txCount", "lastActivityAt", "updatedAt")
-      VALUES
-        (${networkName}, ${address}, ${contractId}, ${sentStr}, ${receivedStr}, ${netStr}, ${count}, ${lastAt}, NOW())
+      VALUES ${Prisma.join(rows)}
       ON CONFLICT ("network", address, "contractId") DO UPDATE SET
-        "totalSent"      = (wraith."AccountSummary"."totalSent"::NUMERIC     + ${sentStr}::NUMERIC)::TEXT,
-        "totalReceived"  = (wraith."AccountSummary"."totalReceived"::NUMERIC  + ${receivedStr}::NUMERIC)::TEXT,
-        net              = (wraith."AccountSummary"."totalReceived"::NUMERIC  + ${receivedStr}::NUMERIC
-                           - wraith."AccountSummary"."totalSent"::NUMERIC     - ${sentStr}::NUMERIC)::TEXT,
-        "txCount"        = wraith."AccountSummary"."txCount" + ${count},
-        "lastActivityAt" = GREATEST(wraith."AccountSummary"."lastActivityAt", ${lastAt}),
+        "totalSent"      = (wraith."AccountSummary"."totalSent"::NUMERIC     + EXCLUDED."totalSent"::NUMERIC)::TEXT,
+        "totalReceived"  = (wraith."AccountSummary"."totalReceived"::NUMERIC  + EXCLUDED."totalReceived"::NUMERIC)::TEXT,
+        net              = (wraith."AccountSummary"."totalReceived"::NUMERIC  + EXCLUDED."totalReceived"::NUMERIC
+                           - wraith."AccountSummary"."totalSent"::NUMERIC     - EXCLUDED."totalSent"::NUMERIC)::TEXT,
+        "txCount"        = wraith."AccountSummary"."txCount" + EXCLUDED."txCount",
+        "lastActivityAt" = GREATEST(wraith."AccountSummary"."lastActivityAt", EXCLUDED."lastActivityAt"),
         "updatedAt"      = NOW()
-    `;
+    `);
   }
+
+  // One transaction for every chunk: all of the batch applies, or none of it.
+  await prisma.$transaction(statements.map((statement) => prisma.$executeRaw(statement)));
 }
 
 /**

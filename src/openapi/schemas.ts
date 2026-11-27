@@ -173,7 +173,13 @@ export const networkQuerySchema = z.preprocess(
 const withNetwork = { network: networkQuerySchema };
 
 export const errorResponseSchema = z.object({
-  error: z.string(),
+  error: z.string().openapi({ description: "Human-readable message, for display." }),
+  code: z.string().openapi({
+    description:
+      "Stable machine-readable code to branch on. Wraith codes are a closed, " +
+      "documented set; a client must default on any value it does not recognise.",
+    example: "invalid_request",
+  }),
 });
 
 export const booleanOkResponseSchema = z.object({
@@ -287,6 +293,36 @@ export const summaryResponseSchema = z.object({
     toDate: isoDateTimeSchema.nullable(),
   }),
   tokens: z.array(tokenSummarySchema),
+});
+
+/**
+ * An amount a person reads, in major units, signed.
+ *
+ * A minus sign is how a negative reads — `displayNetFlow` and every
+ * `displayAmount` already do it this way, and a field whose sign is a word in
+ * the string ("5.0000000 (negative)") is a field no client can format without
+ * special-casing it.
+ */
+const signedDisplayAmountSchema = z
+  .string()
+  .regex(/^-?\d+(\.\d+)?$/, "display amounts are a plain signed decimal, with no words in them");
+
+/** One asset the address has ever touched, as the account summary serves it. */
+export const accountAssetSummarySchema = z.object({
+  contractId: contractAddressSchema,
+  totalSent: z.string(),
+  totalReceived: z.string(),
+  net: z.string(),
+  displayTotalSent: signedDisplayAmountSchema,
+  displayTotalReceived: signedDisplayAmountSchema,
+  displayNet: signedDisplayAmountSchema,
+  txCount: z.number().int(),
+  lastActivityAt: isoDateTimeSchema,
+});
+
+export const accountSummaryResponseSchema = z.object({
+  address: stellarAddressSchema,
+  assets: z.array(accountAssetSummarySchema),
 });
 
 export const webhookFilterSchema = z
@@ -497,6 +533,22 @@ export const summaryQuerySchema = z.object({
   contractId: optionalQueryString("Token contract ID to filter by"),
   fromDate: optionalQueryDateTime("Inclusive lower bound on ledgerClosedAt"),
   toDate: optionalQueryDateTime("Inclusive upper bound on ledgerClosedAt"),
+}).passthrough();
+
+/**
+ * What `GET /accounts/{address}/summary` takes.
+ *
+ * Narrower than {@link summaryQuerySchema} on purpose. That route computes over
+ * the transfer rows and can honour a date window; this one reads the
+ * materialised `AccountSummary` rollup, which holds one all-time row per asset
+ * and has no window to filter. The route rejects `fromDate` and `toDate`
+ * explicitly, but unrelated query parameters pass through for compatibility
+ * with installed apps that add their own.
+ */
+export const accountSummaryQuerySchema = z.object({
+  ...withNetwork,
+  address: stellarAddressSchema,
+  contractId: optionalQueryString("Token contract ID to filter by"),
 }).passthrough();
 
 export const txHashParamsSchema = z.object({
@@ -719,9 +771,9 @@ export const offrampTrustlineResponseSchema = z.object({
 
 export const offrampOrderBodySchema = z
   .object({
-    /** Exactly one of amountNGN / amountStableCoin. */
-    amountNGN: z.number().optional(),
-    amountStableCoin: z.number().optional(),
+    /** Exactly one of amountNGN / amountStableCoin. Accepts a plain number or a decimal string (e.g. "50.00"). */
+    amountNGN: z.union([z.number(), z.string()]).optional(),
+    amountStableCoin: z.union([z.number(), z.string()]).optional(),
     bankAccount: z.string().min(1),
     bankCode: z.string().min(1),
     bankName: z.string().min(1),
@@ -735,19 +787,49 @@ export const offrampOrderBodySchema = z
   .passthrough();
 
 export const offrampOrderStatus = z
-  .enum(["pending", "waiting_for_deposit", "processing", "completed", "failed", "expired"])
-  .openapi({ description: "Client-facing status mapped from the provider's raw one." });
+  .string()
+  .openapi({
+    description:
+      "Client-facing status. The server sends the provider's own word (e.g. `initiated`, " +
+      "`processing`, `settled`, `disbursed`, `failed`, `expired`, `refunded`, `cancelled`), " +
+      "sometimes with a suffix appended for older wallet builds that only recognise a small " +
+      "vocabulary: an expiry becomes `<raw> (timeout)` and a refund, cancel or reversal " +
+      "becomes `<raw> (failed)`. The raw provider word is always in `providerStatus`. " +
+      "To test whether an order has failed, check `providerStatus` against the provider's " +
+      "known terminal words rather than substring-matching this field — substrings are " +
+      "unreliable because words like `refund_pending` contain `refund`.",
+    example: "settled",
+  });
 
 export const offrampOrderResponseSchema = z.object({
-  id: z.string(),
+  id: z.string().openapi({
+    description:
+      "Client-facing order id. Format: `ofr_` followed by 22 URL-safe characters (128 bits). " +
+      "Never the provider's internal id.",
+    example: "ofr_<22 URL-safe characters>",
+  }),
+  accessToken: z.string().openapi({
+    description:
+      "Bearer credential that authorises reading this order. Format: `oft_` followed by " +
+      "43 URL-safe characters (256 bits). Shown exactly once — only its SHA-256 is stored. " +
+      "On a replay the previous token is invalidated and a new one is issued.",
+    example: "oft_<43 URL-safe characters>",
+  }),
   walletAddress: z.string().openapi({ description: "Deposit address the stablecoin is sent to." }),
   chain: z.string(),
   coin: z.string(),
-  amountStableCoin: z.number(),
-  amountNGN: z.number(),
+  coinType: z.string().optional(),
+  currency: z.string().optional(),
+  depositDigest: z.string().optional(),
+  amountStableCoin: z.number().openapi({
+    description: "Stablecoin amount.",
+  }),
+  amountNGN: z.number().openapi({
+    description: "Naira amount.",
+  }),
   rate: z.number(),
   status: offrampOrderStatus,
-  providerStatus: z.string().optional().openapi({ description: "Raw provider status, when the order is not a replay." }),
+  providerStatus: z.string().optional().openapi({ description: "Raw provider status, when the order is a replay." }),
   /** True when an existing idempotencyKey returned the original order instead of creating one. */
   replayed: z.boolean().optional(),
 });
@@ -760,11 +842,18 @@ export const offrampOrderStatusResponseSchema = z.object({
   id: z.string(),
   status: offrampOrderStatus,
   providerStatus: z.string(),
-  amountStableCoin: z.number(),
-  amountNGN: z.number(),
+  amountStableCoin: z.number().openapi({
+    description: "Stablecoin amount.",
+  }),
+  amountNGN: z.number().openapi({
+    description: "Naira amount.",
+  }),
   depositAddress: z.string(),
   rate: z.number(),
   createdAt: z.string().datetime({ offset: true }),
+  currency: z.string().optional(),
+  created: z.string().optional(),
+  updated: z.string().optional(),
   /**
    * "live" when reconciled against the provider, "cache" when the provider was
    * unreachable and the stored row was served instead.
@@ -901,10 +990,39 @@ export const opsFailuresQuerySchema = z.object({
     max: 200,
     description: "Page size. Defaults to 50 and is capped at 200; this is a page, not an export.",
   }),
+  before: optionalQueryInt({
+    min: 1,
+    description:
+      "Only failures older than this id (exclusive). Pass nextBefore from a previous page to walk backwards.",
+  }).openapi({ example: 42 }),
+  network: z.preprocess(
+    (value) => {
+      const raw = firstValue(value);
+      if (raw === undefined || raw === null || raw === "") return undefined;
+      if (typeof raw !== "string") return raw;
+      return raw.trim().toLowerCase();
+    },
+    z
+      .enum(["testnet", "mainnet"])
+      .optional()
+      .openapi({
+        description:
+          "Network to read from. When omitted, failures from all networks are returned. " +
+          "May also be sent as the X-Network header; the query parameter wins.",
+        example: "testnet",
+      })
+  ),
+  since: optionalQueryDateTime(
+    "Only failures recorded at or after this timestamp (ISO 8601).",
+  ).openapi({ example: "2026-01-01T00:00:00.000Z" }),
 });
 
 /** One money-affecting failure, as an operator reads it. */
 const moneyFailureSchema = z.object({
+  id: z.number().int().openapi({
+    description: "Failure record id.",
+    example: 42,
+  }),
   network: z.string().openapi({ example: "testnet" }),
   rail: z.string().openapi({
     description: "Which rail failed: offramp, onramp, bill, or unknown.",
@@ -942,6 +1060,10 @@ const moneyFailureSchema = z.object({
 export const opsFailuresResponseSchema = z.object({
   failures: z.array(moneyFailureSchema).openapi({ description: "Recent failures, newest first." }),
   limit: z.number().int().openapi({ description: "The page size actually applied, after capping." }),
+  nextBefore: z.number().int().nullable().openapi({
+    description: "The id to pass as before on the next call, or null on the last page.",
+    example: 42,
+  }),
 });
 
 export const ngnCustomerStatusQuerySchema = z.object({

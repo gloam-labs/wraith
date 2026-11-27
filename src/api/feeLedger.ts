@@ -42,7 +42,7 @@ import { toDisplayAmount } from "../amount";
 import { resolveSacContractIds } from "../indexer";
 import { feeQuoteAlarmsTotal, feeQuoteRecordFailuresTotal } from "../metrics";
 import type { Network } from "../network";
-import type { FeeBasis, PlatformFee } from "./fees";
+import { compareDecimal, formatDecimal, parseDecimal, type FeeBasis, type PlatformFee } from "./fees";
 
 // ─── Policy ──────────────────────────────────────────────────────────────────
 
@@ -126,41 +126,66 @@ export interface QuotedFee {
 
 const DP = 7;
 
-/** A positive decimal, at Stellar's seven places, trailing zeros removed. */
-function decimal(value: number): string {
-  if (!Number.isFinite(value)) return String(value);
-  // toFixed switches to exponent notation from 1e21 on; such an amount is not
-  // sendable anyway, but the record should still say what was asked.
-  if (Math.abs(value) >= 1e21) return String(value);
-  return value.toFixed(DP).replace(/0+$/, "").replace(/\.$/, "") || "0";
-}
-
 /** Strip trailing zeros from a decimal string that Postgres returned. */
 function trimDecimal(value: string): string {
   return value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
 }
 
+/**
+ * `charged / sent × 100` rendered to seven places, computed exactly.
+ *
+ * The fee and the amount are decimals; in floats their ratio can land a hair
+ * on the wrong side of the alarm limit (a fee of exactly 10% reading as
+ * 10.000000000000002%), so the comparison and the rendering are both done on
+ * the parsed values. The rendered value rounds half up at the seventh place,
+ * as `toFixed` did for the float it replaces.
+ */
+function percentOfSent(charged: string, sent: string): { text: string; over: (limit: number) => boolean } | null {
+  const chargedParts = parseDecimal(charged);
+  const sentParts = parseDecimal(sent);
+  if (!chargedParts || !sentParts || sentParts.digits <= 0n) return null;
+  // The ratio as an exact fraction num/den:
+  // charged/sent × 100 = chargedDigits × 100 × 10^(sentScale − chargedScale) / sentDigits.
+  const e = BigInt(sentParts.scale - chargedParts.scale);
+  const num = chargedParts.digits * 100n * (e >= 0n ? 10n ** e : 1n);
+  const den = sentParts.digits * (e >= 0n ? 1n : 10n ** -e);
+  // Rendered to DP places, rounding half up — as `toFixed` did for the float
+  // this replaces: floor((2·num·10^DP + den) / 2·den).
+  const rounded = (2n * num * 10n ** BigInt(DP) + den) / (2n * den);
+  const text = formatDecimal({ digits: rounded, scale: DP });
+  return {
+    text,
+    over: (limit: number) => {
+      const limitParts = parseDecimal(String(limit));
+      if (!limitParts) return false;
+      // num/den > limitDigits/10^limitScale, compared exactly.
+      return compareDecimal({ digits: num, scale: 0 }, { digits: limitParts.digits * den, scale: limitParts.scale }) > 0;
+    },
+  };
+}
+
 /** The row this quote becomes, before anything is written. */
 export function quoteRow(
   network: Network,
-  sent: number | undefined,
+  sent: number | string | undefined,
   { fee, basis }: QuotedFee,
   limitPercent = alarmPercent(),
 ) {
   const policy = policyOf(fee);
-  const charged = Number(fee.amount);
-  const percentOfAmount = sent !== undefined && sent > 0 ? (charged / sent) * 100 : null;
+  const sentText = sent !== undefined ? (typeof sent === "number" ? String(sent) : sent.trim()) : null;
+  const sentParts = sentText !== null ? parseDecimal(sentText) : null;
+  const percent = sentText !== null ? percentOfSent(fee.amount, sentText) : null;
   return {
     policy,
     data: {
       network,
       assetCode: fee.assetCode,
       assetIssuer: fee.assetIssuer,
-      quotedAgainst: sent !== undefined ? decimal(sent) : null,
+      quotedAgainst: sentText !== null ? (sentParts ? formatDecimal(sentParts) : sentText) : null,
       fee: fee.amount,
       basis,
-      feePercent: percentOfAmount !== null ? decimal(percentOfAmount) : null,
-      alarm: percentOfAmount !== null && percentOfAmount > limitPercent,
+      feePercent: percent?.text ?? null,
+      alarm: percent !== null && percent.over(limitPercent),
       policyId: policyId(policy),
     },
   };
@@ -185,7 +210,7 @@ export function _forgetKnownPolicies(): void {
  */
 export async function recordFeeQuotes(
   network: Network,
-  sent: number | undefined,
+  sent: number | string | undefined,
   quoted: QuotedFee[],
 ): Promise<void> {
   if (quoted.length === 0) return;

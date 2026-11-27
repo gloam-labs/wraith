@@ -30,6 +30,7 @@ const parseEventTypes = (val: unknown, res: Response): string[] | null | undefin
   if (invalid.length) {
     res.status(400).json({
       error: `Invalid eventType: "${invalid.join('", "')}". Valid values: transfer, mint, burn, clawback.`,
+      code: "invalid_request",
     });
     return null;
   }
@@ -40,7 +41,10 @@ const parseDateParam = (val: unknown, res: Response): Date | null | undefined =>
   if (val === undefined || val === "") return undefined;
   const d = new Date(String(val));
   if (isNaN(d.getTime())) {
-    res.status(400).json({ error: `Invalid date: "${val}". Expected ISO 8601 (e.g. 2025-01-01T00:00:00Z).` });
+    res.status(400).json({
+      error: `Invalid date: "${val}". Expected ISO 8601 (e.g. 2025-01-01T00:00:00Z).`,
+      code: "invalid_request",
+    });
     return null;
   }
   return d;

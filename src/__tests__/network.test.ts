@@ -41,8 +41,18 @@ function recorder() {
     ) as AnyRecord;
 
   const raw: Array<{ strings: string[]; values: unknown[] }> = [];
-  const rawFn = (strings: TemplateStringsArray | string[], ...values: unknown[]) => {
-    raw.push({ strings: Array.from(strings as string[]), values });
+  // Prisma accepts either a tagged template or a pre-built `Prisma.Sql`.
+  // upsertAccountSummaries passes the latter (#450), so unwrap it here too.
+  const rawFn = (
+    strings: TemplateStringsArray | string[] | AnyRecord,
+    ...values: unknown[]
+  ) => {
+    const built = strings as AnyRecord;
+    if (Array.isArray(built.strings) && Array.isArray(built.values)) {
+      raw.push({ strings: Array.from(built.strings as string[]), values: built.values as unknown[] });
+    } else {
+      raw.push({ strings: Array.from(strings as string[]), values });
+    }
     return Promise.resolve([]);
   };
 

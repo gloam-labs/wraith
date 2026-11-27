@@ -8,7 +8,17 @@ jest.mock("../db", () => ({
   queryAllTransfers: jest.fn(),
   queryByTxHash: jest.fn(),
   querySummary: jest.fn(),
-  prisma: { $queryRaw: jest.fn() },
+  prisma: {
+    $queryRaw: jest.fn(),
+    webhookSubscription: { findMany: jest.fn(), findUnique: jest.fn() },
+  },
+}));
+
+// GET /fees answers from environment variables. The ledger write that follows
+// the answer is fire-and-forget, so it is mocked rather than exercised here.
+jest.mock("../api/feeLedger", () => ({
+  recordFeeQuotes: jest.fn(),
+  feeReport: jest.fn(),
 }));
 
 jest.mock("../rpc", () => ({
@@ -41,6 +51,10 @@ const mockIsIndexerStopped = isIndexerStopped as jest.MockedFunction<typeof isIn
 const mockGetIndexerUnstartedReason = getIndexerUnstartedReason as jest.MockedFunction<typeof getIndexerUnstartedReason>;
 
 const ALICE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+
+const mockWebhookFindMany = (prisma as unknown as {
+  webhookSubscription: { findMany: jest.Mock };
+}).webhookSubscription.findMany;
 
 describe("Graceful stale reads during RPC outage (#164)", () => {
   const app = createApp();
@@ -136,6 +150,60 @@ describe("Graceful stale reads during RPC outage (#164)", () => {
       expect(res.body.indexer_running).toBe(false);
       expect(res.body.as_of_ledger).toBe(1000);
       expect(res.body.transfers).toHaveLength(1);
+    });
+  });
+
+  describe("Routes that never read the chain (#459)", () => {
+    it("serves GET /fees identically with the RPC up or down, and never probes the RPC", async () => {
+      // The fee comes from environment variables; the RPC cannot make it less
+      // current, so it must not be marked stale, rewritten, or made to wait.
+      mockGetLatestLedger.mockRejectedValue(new Error("Soroban RPC connection refused"));
+      const down = await request(app).get("/fees");
+
+      clearRpcHealthCache();
+      mockGetLatestLedger.mockResolvedValue(1050);
+      const up = await request(app).get("/fees");
+
+      expect(down.status).toBe(200);
+      expect(up.status).toBe(200);
+      expect(down.body).toEqual(up.body);
+      expect(down.body.stale).toBeUndefined();
+      expect(down.body.as_of_ledger).toBeUndefined();
+      expect(down.headers["x-data-stale"]).toBeUndefined();
+      expect(mockGetLatestLedger).not.toHaveBeenCalled();
+    });
+
+    it("serves GET /webhooks unchanged and without an RPC call when the RPC is down", async () => {
+      const subscriptions = [
+        { id: "w1", url: "https://example.test/hook", filter: null, active: true },
+      ];
+      mockWebhookFindMany.mockResolvedValue(subscriptions);
+      mockGetLatestLedger.mockRejectedValue(new Error("Soroban RPC connection refused"));
+
+      const res = await request(app).get("/webhooks");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ subscriptions });
+      expect(res.headers["x-data-stale"]).toBeUndefined();
+      expect(mockGetLatestLedger).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("One health check per network (#459)", () => {
+    it("ten concurrent chain reads on a cold cache make one RPC call", async () => {
+      mockQueryTransfers.mockResolvedValue({ total: 0, transfers: [], hasMore: false, nextCursor: null });
+
+      const responses = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          request(app).get(`/transfers/incoming/${ALICE}?network=testnet`),
+        ),
+      );
+
+      for (const res of responses) {
+        expect(res.status).toBe(200);
+      }
+      expect(mockGetLatestLedger).toHaveBeenCalledTimes(1);
+      expect(mockGetLatestLedger).toHaveBeenCalledWith("testnet");
     });
   });
 

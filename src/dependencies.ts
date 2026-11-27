@@ -23,7 +23,7 @@
 export const dependencyStatusBoundMs: number = 15 * 60 * 1000;
 
 /** A fixed vocabulary, so a reason can never carry provider text. */
-export type DependencyFailure = "timeout" | "error";
+export type DependencyFailure = "timeout" | "error" | "rate_limited";
 
 export interface DependencyOutcome {
   status: "healthy" | "unavailable";
@@ -42,9 +42,10 @@ const dependencyOutcomes = new Map<string, StoredOutcome>();
 /**
  * Record how a provider call went.
  *
- * `error` is one of two words, never a message. A provider error string can
- * contain the request URL, and an API key lives in the path or query of some of
- * ours — `/status` is the last place that should repeat one back.
+ * `error` is drawn from the bounded {@link DependencyFailure} union, never a
+ * free-form message. A provider error string can contain the request URL, and
+ * an API key lives in the path or query of some of ours — `/status` is the last
+ * place that should repeat one back.
  */
 export function recordDependencyOutcome(
   name: string,

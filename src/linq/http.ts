@@ -31,7 +31,7 @@ import {
   providerRateLimitWaitSeconds,
   providerRequestDurationSeconds,
 } from "../metrics";
-import { recordDependencyOutcome } from "../dependencies";
+import { recordDependencyOutcome, type DependencyFailure } from "../dependencies";
 
 const DEFAULT_BASE_URL = "https://confidential-brianna-uselinq-52e2b233.koyeb.app";
 
@@ -450,6 +450,7 @@ export async function linqCall<T>(path: string, options: LinqCallOptions): Promi
   // seconds before succeeding is two seconds the provider cost us.
   const startedAt = process.hrtime.bigint();
   let outcome: ProviderCallOutcome = "success";
+  let failureStatus: number | undefined;
 
   try {
     for (let tried = 0; ; tried++) {
@@ -501,6 +502,7 @@ export async function linqCall<T>(path: string, options: LinqCallOptions): Promi
     }
   } catch (err) {
     outcome = classifyFailureOutcome(err);
+    if (err instanceof LinqError) failureStatus = err.status;
     throw err;
   } finally {
     const endpoint = normalizeEndpointPath(path);
@@ -517,13 +519,44 @@ export async function linqCall<T>(path: string, options: LinqCallOptions): Promi
 
     // The same observation `/status` reports, taken from the call that was
     // happening anyway so the status route never has to probe the provider
-    // itself. Only the outcome word is kept: a Linq error message can contain
-    // the request URL, and `/status` must not repeat one back.
+    // itself. Only the bounded outcome word is kept: a Linq error message can
+    // contain the request URL, and `/status` must not repeat one back.
+    // Observations are last-call-wins, so a subsequent healthy call clears a
+    // prior failure immediately.
+    //
+    // Health classification (#456):
+    // - `success` and plain `4xx` (excluding `401` and `403`): the provider
+    //   answered normally (a caller validation error such as a wrong bank code
+    //   or unknown order id, not an outage), so the dependency stays `healthy`
+    //   (`railsUsable: true`).
+    // - `401` and `403`: kept `unavailable` with `"error"` because a revoked
+    //   or rotated API key — or a blanket 403 from the provider's hosting
+    //   platform — breaks the naira rails for every user.
+    // - `429`: only reaches this block when retries/budget are exhausted and a
+    //   429 surfaces to the caller (absorbed retries end as `success`). Because
+    //   every Veil user shares one Linq API key, a surfaced 429 means the rails
+    //   are actively refusing traffic; recording it as `unavailable` with the
+    //   bounded reason `"rate_limited"` keeps it visible to operators on
+    //   `/status` and distinct from a 5xx outage.
+    // - `timeout`: `unavailable` with `"timeout"`.
+    // - `5xx` (including unreachable host / connection failures): `unavailable`
+    //   with `"error"`.
+    const isAuthFailure = failureStatus === 401 || failureStatus === 403;
+    const depUsable = outcome === "success" || (outcome === "4xx" && !isAuthFailure);
+    const depError: DependencyFailure | undefined =
+      depUsable
+        ? undefined
+        : outcome === "timeout"
+          ? "timeout"
+          : outcome === "429"
+            ? "rate_limited"
+            : "error";
+
     recordDependencyOutcome(
       "linq",
-      outcome === "success",
+      depUsable,
       Math.round(elapsedMs),
-      outcome === "timeout" ? "timeout" : outcome === "success" ? undefined : "error",
+      depError,
     );
   }
 }

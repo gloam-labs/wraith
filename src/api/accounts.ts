@@ -2,8 +2,8 @@ import { Router, Request, Response, NextFunction } from "express";
 import { getAccountSummary, queryBalances } from "../db";
 import { toDisplayAmount } from "../amount";
 import { createAccountsTransfersRouter } from "../routes/accounts/transfers";
-import { parseOr400 } from "../openapi/validation";
-import { summaryQuerySchema } from "../openapi/schemas";
+import { parseOr400, sendValidationError } from "../openapi/validation";
+import { accountSummaryQuerySchema } from "../openapi/schemas";
 import { requestNetwork } from "../middleware/network";
 import { getCachedTokenDecimals } from "../tokenCache";
 
@@ -67,31 +67,47 @@ export function createAccountsRouter(): Router {
   );
 
   // ── GET /accounts/:address/summary ─────────────────────────────────────────
+  /**
+   * One row per asset the address has ever touched, read from the materialised
+   * `AccountSummary` rollup.
+   *
+   * All-time, whatever the caller asks for: the rollup holds one row per asset
+   * with no window in it, so `accountSummaryQuerySchema` refuses `fromDate` and
+   * `toDate` rather than answering all-time totals under a request for a month.
+   * A windowed summary is `/summary/:address`.
+   */
   router.get(
     "/:address/summary",
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const parsed = parseOr400(summaryQuerySchema, { ...req.params, ...req.query }, res);
+        const parsed = parseOr400(accountSummaryQuerySchema, { ...req.params, ...req.query }, res);
         if (!parsed) return;
+        if (req.query.fromDate !== undefined || req.query.toDate !== undefined) {
+          sendValidationError(res, {
+            issues: [{
+              message:
+                "fromDate and toDate are not supported on the all-time account summary; " +
+                "use /summary/:address for a date window",
+            }],
+          });
+          return;
+        }
         const { address, contractId } = parsed;
 
         const network = requestNetwork(req);
         const rows = await getAccountSummary(address, contractId, network);
 
-        const assets = rows.map((row: AccountSummaryRow) => {
-          const net = BigInt(row.net);
-          return {
-            contractId:          row.contractId,
-            totalSent:           row.totalSent,
-            totalReceived:       row.totalReceived,
-            net:                 row.net,
-            displayTotalSent:    toDisplayAmount(row.totalSent, getCachedTokenDecimals(row.contractId, network)),
-            displayTotalReceived:toDisplayAmount(row.totalReceived, getCachedTokenDecimals(row.contractId, network)),
-            displayNet:          toDisplayAmount(net < 0n ? (-net).toString() : row.net, getCachedTokenDecimals(row.contractId, network)) + (net < 0n ? " (negative)" : ""),
-            txCount:             row.txCount,
-            lastActivityAt:      row.lastActivityAt,
-          };
-        });
+        const assets = rows.map((row: AccountSummaryRow) => ({
+          contractId:          row.contractId,
+          totalSent:           row.totalSent,
+          totalReceived:       row.totalReceived,
+          net:                 row.net,
+          displayTotalSent:    toDisplayAmount(row.totalSent, getCachedTokenDecimals(row.contractId, network)),
+          displayTotalReceived:toDisplayAmount(row.totalReceived, getCachedTokenDecimals(row.contractId, network)),
+          displayNet:          toDisplayAmount(row.net, getCachedTokenDecimals(row.contractId, network)),
+          txCount:             row.txCount,
+          lastActivityAt:      row.lastActivityAt,
+        }));
 
         res.json({ address, assets });
       } catch (err) {

@@ -128,7 +128,7 @@ export function createOpaMiddleware(opts: OpaMiddlewareOptions = {}) {
       // OPA unreachable — fail closed (deny all)
       const message = err instanceof Error ? err.message : String(err);
       console.error("[opa] policy engine unreachable:", message, { path: req.path, method: req.method });
-      res.status(503).json({ error: "Authorization service unavailable" });
+      res.status(503).json({ error: "Authorization service unavailable", code: "internal_error" });
       return;
     }
 
@@ -149,6 +149,7 @@ export function createOpaMiddleware(opts: OpaMiddlewareOptions = {}) {
 
       res.status(403).json({
         error:  "Forbidden",
+        code:   "forbidden",
         rule,
         reason,
       });

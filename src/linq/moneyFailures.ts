@@ -29,6 +29,7 @@ import { prisma } from "../db";
 import { Prisma } from "@prisma/client";
 import { when } from "../prismaWhen";
 import { moneyFailuresTotal } from "../metrics";
+import { endingsOf, type ProviderEnding } from "./providerStatus";
 
 /**
  * The rails a failure can be on. Bounded on purpose — this is a metrics label
@@ -62,19 +63,31 @@ export function isMoneyFailureKind(value: unknown): value is MoneyFailureKind {
 }
 
 /**
+ * The endings worth recording: an order that ended failed, timed out, expired,
+ * was cancelled, reversed or refunded, plus "rejected", the provider's word for
+ * a refused payout. The same endings `statusForClients` sends to wallet apps as
+ * finished-and-lost.
+ */
+const FAILURE_ENDINGS: readonly ProviderEnding[] = [
+  "failed",
+  "rejected",
+  "timeout",
+  "expired",
+  "cancelled",
+  "reversed",
+  "refunded",
+];
+
+/**
  * Whether a provider status is a failure ending.
  *
- * Shares its vocabulary with `statusForClients`: an ending the wallet apps
- * treat as finished ("failed", "timeout", and the expire/cancel/reverse/refund
- * words that get mapped onto them) is exactly the set of endings worth
- * recording. Plus "reject", the provider's word for a refused payout.
+ * Read through `classifyProviderStatus`, never by substring: "refund_pending"
+ * contains "refund" but the order is still moving, and recording it here would
+ * write an incident for an order that has not ended (#418). A still-moving or
+ * unknown status is never a failure.
  */
 export function isFailureStatus(status: string | null | undefined): boolean {
-  if (!status) return false;
-  const s = status.toLowerCase();
-  return ["fail", "reject", "timeout", "expire", "cancel", "revers", "refund"].some((word) =>
-    s.includes(word),
-  );
+  return endingsOf(status).some((ending) => FAILURE_ENDINGS.includes(ending));
 }
 
 export interface RecordMoneyFailureParams {
