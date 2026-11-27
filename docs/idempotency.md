@@ -109,10 +109,11 @@ redelivery of `order.processing` arriving after `order.completed` or
 untouched, preventing the periodic sweep from re-polling a finished order, and
 ensuring `orders_terminal_total` counts each order's ending exactly once in any
 delivery order. A different terminal status (such as `refunded` after
-`completed`) or a status carrying a failure word (such as `refund_pending` or
-`rejected`, matched by `isFailureStatus`) still passes through so
-post-completion refunds and rejections update the row, stay visible to the
-reconciliation sweep, and record a money failure.
+`completed`), a failure ending (such as `rejected`, matched by
+`isFailureStatus`), or a refund/reversal in progress (such as `refund_pending`,
+matched by `isRefundOrReversalInProgress`) still passes through: an in-progress
+refund/reversal updates status so the reconciliation sweep picks the order up
+again without recording a money failure until the final ending arrives.
 
 ### `POST /ngn/onramp/orders` and `POST /ngn/bills`: **not idempotent**
 

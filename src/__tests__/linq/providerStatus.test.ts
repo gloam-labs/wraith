@@ -3,7 +3,10 @@ import {
   billStatusForClients,
 } from "../../linq/statusForClients";
 import { isFailureStatus } from "../../linq/moneyFailures";
-import { classifyProviderStatus } from "../../linq/providerStatus";
+import {
+  classifyProviderStatus,
+  isRefundOrReversalInProgress,
+} from "../../linq/providerStatus";
 import { terminalStatusOf } from "../../metrics";
 
 /**
@@ -192,5 +195,41 @@ describe("classifyProviderStatus", () => {
       kind: "ended",
       endings: ["timeout", "completed"],
     });
+  });
+});
+
+describe("isRefundOrReversalInProgress", () => {
+  it.each([
+    "refund_pending",
+    "refund_processing",
+    "awaiting_refund",
+    "Refund Pending",
+    "order.refund_pending",
+    "reversal_pending",
+    "reverse_in_progress",
+    "awaiting_reversal",
+  ])("returns true for %s", (status) => {
+    expect(isRefundOrReversalInProgress(status)).toBe(true);
+  });
+
+  it.each([
+    "processing",
+    "pending",
+    "settled_pending",
+    "cancel_requested",
+    "cancellation_pending",
+    "nonrefundable_pending",
+    "refunded",
+    "reversed",
+    "rejected",
+    "completed",
+    "",
+  ])("returns false for %j", (status) => {
+    expect(isRefundOrReversalInProgress(status)).toBe(false);
+  });
+
+  it("returns false for null and undefined", () => {
+    expect(isRefundOrReversalInProgress(null)).toBe(false);
+    expect(isRefundOrReversalInProgress(undefined)).toBe(false);
   });
 });

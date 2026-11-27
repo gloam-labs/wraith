@@ -97,11 +97,11 @@ export function createLinqWebhookRouter(): Router {
         // Order-safe for finished orders: a late non-terminal delivery (such as
         // `order.processing` arriving after `order.completed` or `order.failed`)
         // is logged once and ignored without touching status or settled amounts.
-        // A different terminal status (e.g. `refunded` after `completed`) and
-        // failure-bearing statuses (e.g. `refund_pending` or `rejected`) still
-        // pass through so post-completion refunds/rejections update the row and
-        // record a money failure, while `orders_terminal_total` counts only
-        // non-terminal -> terminal transitions.
+        // A different terminal status (e.g. `refunded` after `completed`), a
+        // failure ending (e.g. `rejected`), and a refund or reversal in progress
+        // (e.g. `refund_pending`) still pass through: an in-progress unwind
+        // updates status so the sweep picks the order up again, and a money
+        // failure is recorded once a final failure ending arrives.
         const network = resolveEventNetwork(event);
         if (!network) {
           console.warn(`[linq] webhook for order ${event.orderId} names an invalid network`);

@@ -523,9 +523,9 @@ writes settled figures to a row keyed on the order id, ignores late non-terminal
 events (such as `order.processing` arriving after `order.completed` or
 `order.failed`) with a single log line so status, settled amounts and
 `orders_terminal_total` stay intact, and still lets through subsequent terminal
-statuses (`refunded`) and failure-bearing statuses (`refund_pending`, `rejected`)
-so post-completion refunds and rejections update the row and record a money failure
-([idempotency.md](./idempotency.md)). The 200 is sent *before* reconciling, because Linq times out at
+statuses (`refunded`), failure endings (`rejected`), and refunds/reversals in
+progress (`refund_pending` — updating status for the sweep first and recording a
+money failure when the final ending arrives; [idempotency.md](./idempotency.md)). The 200 is sent *before* reconciling, because Linq times out at
 10 seconds and marks the delivery failed, and a database write on a throttled
 instance can outlast that.
 

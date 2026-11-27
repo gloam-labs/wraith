@@ -32,6 +32,7 @@
 import { prisma } from "../db";
 import { recordOrderTerminal, terminalStatusOf } from "../metrics";
 import { isFailureStatus, recordMoneyFailure } from "./moneyFailures";
+import { isRefundOrReversalInProgress } from "./providerStatus";
 import { crossCheckAmountNgn, NGN_SCALE_FACTOR, resolveEventNetwork } from "./webhook";
 
 export type NgnOrderKind = "onramp" | "bill";
@@ -197,15 +198,16 @@ export async function reconcileNgnOrder(event: {
   const wasTerminal = terminalStatusOf(existing.status);
   const isTerminal = terminalStatusOf(status);
   const isFailure = isFailureStatus(status);
+  const isUnwindMoving = isRefundOrReversalInProgress(status);
 
   // Never let a late non-terminal event (such as an out-of-order
   // `order.processing` webhook or a stale poll from the sweep) move a finished
   // order back to in-flight or overwrite its settled figures. Terminal-to-
-  // terminal transitions (e.g. completed -> refunded) and statuses carrying a
-  // failure word (e.g. `refund_pending` or `rejected`) remain allowed so
-  // post-completion refunds and rejections still update the row, stay visible
-  // to the reconciliation sweep, and record a money failure.
-  if (wasTerminal && !isTerminal && !isFailure) {
+  // terminal transitions (e.g. completed -> refunded), failure endings (e.g.
+  // `rejected`), and a refund or reversal in progress (e.g. `refund_pending`)
+  // remain allowed: an in-progress unwind updates status so the sweep picks it
+  // up again, and `recordMoneyFailure` runs when a final failure ending arrives.
+  if (wasTerminal && !isTerminal && !isFailure && !isUnwindMoving) {
     console.warn(
       `[linq] ignoring late non-terminal status "${status}" for ${existing.kind} order ${event.orderId} (already "${existing.status}")`,
     );
