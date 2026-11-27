@@ -107,6 +107,7 @@ Wraith-assigned codes (the closed set; see `RAIL_ERROR_CODES` in
 | `invalid_nin_format` | A NIN is not 11 digits — the same code from our check and Linq's (400). |
 | `idempotency_conflict` | The `idempotencyKey` was used for a different request (409). |
 | `unauthorized` | No order access token on `GET /offramp/orders/:orderId` (401). |
+| `forbidden` | Authenticated but not allowed — the metrics scrape token or the OPA policy refused the request (403). |
 | `order_not_found` | Unknown id, malformed id, or a token that is not its — indistinguishable (404). |
 | `provider_rejected` | The provider refused (4xx) with no usable code of its own. |
 | `provider_error` | The provider failed (5xx) with no usable code of its own (answered as 502). |

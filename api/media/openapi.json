@@ -63,14 +63,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -84,14 +88,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -105,14 +113,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -254,14 +266,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -275,14 +291,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -296,14 +316,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -908,14 +932,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -929,14 +957,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -950,14 +982,43 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Human-readable message, for display."
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -1267,14 +1328,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -1288,14 +1353,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -1309,14 +1378,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -1626,14 +1699,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -1647,14 +1724,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -1668,14 +1749,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -1985,14 +2070,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2006,14 +2095,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2027,14 +2120,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2183,14 +2280,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2204,14 +2305,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2225,14 +2330,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2356,14 +2465,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2377,14 +2490,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2398,14 +2515,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2577,14 +2698,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2598,14 +2723,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2619,14 +2748,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2762,14 +2895,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2783,14 +2920,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2804,14 +2945,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2909,14 +3054,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2930,14 +3079,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -2951,14 +3104,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3268,14 +3425,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3289,14 +3450,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3310,14 +3475,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3472,14 +3641,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3493,14 +3666,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3514,14 +3691,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3607,14 +3788,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3628,14 +3813,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3649,14 +3838,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3709,14 +3902,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3730,14 +3927,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3751,14 +3952,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3907,14 +4112,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3928,14 +4137,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -3949,14 +4162,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4122,14 +4339,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4143,14 +4364,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4164,14 +4389,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4429,14 +4658,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4450,14 +4683,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4471,14 +4708,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4569,14 +4810,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4590,14 +4835,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4611,14 +4860,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4781,14 +5034,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4802,14 +5059,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4823,14 +5084,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4932,14 +5197,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4953,14 +5222,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -4974,14 +5247,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5088,14 +5365,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5109,14 +5390,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5130,14 +5415,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5225,6 +5514,31 @@
                   "required": [
                     "enabled",
                     "fees"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "description": "Human-readable message, for display."
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5425,14 +5739,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5446,14 +5764,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5467,14 +5789,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5488,14 +5814,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5509,14 +5839,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5661,14 +5995,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5682,14 +6020,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5703,14 +6045,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5855,14 +6201,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5876,14 +6226,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5897,14 +6251,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5948,14 +6306,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -5969,14 +6331,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -7758,14 +8124,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -7779,14 +8149,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -7800,14 +8174,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
@@ -7821,14 +8199,18 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Human-readable message, for display."
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable machine-readable code to branch on. Wraith codes are a closed, documented set; a client must default on any value it does not recognise.",
+                      "example": "invalid_request"
                     }
                   },
                   "required": [
-                    "error"
+                    "error",
+                    "code"
                   ]
                 }
               }
