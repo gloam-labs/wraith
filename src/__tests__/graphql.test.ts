@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import path from "path";
 import request from "supertest";
 import { createApp } from "../api";
+import { querySummary } from "../db";
 import { resetPersistedQueryCache } from "../graphql/persisted";
 import { persistQueryFiles } from "../graphql/persist-queries";
 
@@ -59,6 +60,11 @@ describe("GraphQL server plugins", () => {
     }
   });
 
+  // #404: a plugin refusal is a client error, not a server fault. These two
+  // tests used to pin the opposite — HTTP 500 with the real message masked
+  // as "Internal server error" — which described the wrong behaviour: the
+  // caller was told the server had failed when the query was simply refused,
+  // and was given nothing it could act on.
   it("rejects an over-cost query at /graphql", async () => {
     process.env.GRAPHQL_MAX_COST = "1";
 
@@ -66,9 +72,12 @@ describe("GraphQL server plugins", () => {
       .post("/graphql")
       .send({ query: "{ health { ok version } }" });
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(400);
     expect(res.body.data).toBeUndefined();
-    expect(res.body.errors?.[0]?.message).toBe("Internal server error");
+    expect(res.body.errors?.[0]?.message).toBe(
+      "Query cost 3 exceeds the maximum allowed cost of 1",
+    );
+    expect(res.body.errors?.[0]?.extensions?.code).toBe("QUERY_TOO_COSTLY");
   });
 
   it("blocks non-allowlisted production queries at /graphql", async () => {
@@ -77,9 +86,43 @@ describe("GraphQL server plugins", () => {
       .post("/graphql")
       .send({ query: "{ health { ok } }" });
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(400);
     expect(res.body.data).toBeUndefined();
+    expect(res.body.errors?.[0]?.message).toBe(
+      "Persisted query hash is required in production",
+    );
+    expect(res.body.errors?.[0]?.extensions?.code).toBe("PERSISTED_QUERY_REQUIRED");
+  });
+
+  it("answers an unknown persisted hash in production with a client error", async () => {
+    process.env.NODE_ENV = "production";
+    const hash = createHash("sha256").update("{ health { ok } }").digest("hex");
+
+    const res = await request(createApp())
+      .post("/graphql")
+      .send({ extensions: { persistedQuery: { sha256Hash: hash } } });
+
+    expect(res.status).toBe(400);
+    expect(res.body.data).toBeUndefined();
+    expect(res.body.errors?.[0]?.message).toBe(`Persisted query not found for hash ${hash}`);
+    expect(res.body.errors?.[0]?.extensions?.code).toBe("PERSISTED_QUERY_NOT_FOUND");
+  });
+
+  // #404 changed only the plugins' refusals. A failure nobody planned for —
+  // here a resolver whose database call blows up — must still be masked:
+  // the client learns that the server failed, never why.
+  it("still masks a genuinely unexpected failure at /graphql", async () => {
+    (querySummary as jest.Mock).mockRejectedValueOnce(
+      new Error("postgres://user:secret@db.internal:5432/wraith"),
+    );
+
+    const res = await request(createApp())
+      .post("/graphql")
+      .send({ query: '{ summary(address: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") { contractId } }' });
+
+    expect(res.body.data).toBeNull();
     expect(res.body.errors?.[0]?.message).toBe("Internal server error");
+    expect(JSON.stringify(res.body)).not.toContain("secret");
   });
 
   it("runs an allowlisted persisted query in production", async () => {
