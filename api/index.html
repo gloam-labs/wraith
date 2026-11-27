@@ -380,6 +380,15 @@ name the Prometheus gauge is exported under. Both always carry the same value.</
 <p><code>network</code> names which chain the top-level fields describe — it follows the
 selector. <code>networks</code> reports every running loop regardless of the selector, so a
 single response shows one chain falling behind while the other is healthy.</p>
+<p><code>dependencies</code> reports passive observations from real provider calls (never
+live probes) within <code>dependency_status_bound_ms</code>. Observations are
+last-call-wins, so a subsequent healthy call clears a prior failure
+immediately. Plain <code>4xx</code> client rejections (such as <code>400</code>, <code>404</code>, <code>422</code>) keep
+the provider <code>healthy</code> (<code>railsUsable: true</code>), while <code>401</code>/<code>403</code> auth or access
+rejections and <code>5xx</code> / unreachable hosts (<code>error</code>), timeouts (<code>timeout</code>), and
+surfaced <code>429</code> rate limits (<code>rate_limited</code>) mark it <code>unavailable</code>
+(<code>railsUsable: false</code>) using only that bounded vocabulary — never provider
+messages, URLs, or order IDs.</p>
 <hr>
 <h3 id="_-1" class="tsd-anchor-link"><code>GET /metrics</code><a href="#_-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <p>Indexer and process metrics in Prometheus text exposition format, for scraping,
