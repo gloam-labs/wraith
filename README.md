@@ -1601,6 +1601,10 @@ npx @veil/wraith-cli webhooks delete <webhook-id>
 ```
 
 ***
+## Networks
+
+> **Status:** Work in Progress (Issue #413) — Client-level `network` configuration and per-network cache isolation.
+
 
 ## References
 
