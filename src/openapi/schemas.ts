@@ -262,12 +262,16 @@ export const transferSchema = z.object({
   direction: z.enum(["incoming", "outgoing"]).optional(),
 });
 
-export const transferListResponseSchema = z.object({
+const paginatedListFields = {
   total: z.number().int().optional().openapi({ description: "Exact match count. Only present when the request set includeTotal=true" }),
   hasMore: z.boolean().openapi({ description: "True when another page exists" }),
   limit: z.number().int(),
   offset: z.number().int(),
   nextCursor: z.string().nullable().optional(),
+};
+
+export const transferListResponseSchema = z.object({
+  ...paginatedListFields,
   transfers: z.array(transferSchema),
 });
 
@@ -430,11 +434,7 @@ export const nftTransferSchema = z.object({
 });
 
 export const nftTransfersResponseSchema = z.object({
-  total: z.number().int().optional().openapi({ description: "Exact match count. Only present when the request set includeTotal=true" }),
-  hasMore: z.boolean().openapi({ description: "True when another page exists" }),
-  limit: z.number().int(),
-  offset: z.number().int(),
-  nextCursor: z.string().nullable().optional(),
+  ...paginatedListFields,
   transfers: z.array(nftTransferSchema),
 });
 
@@ -527,13 +527,15 @@ export const transferQuerySchema = z.object({
   includeTotal: optionalQueryBool("Also return an exact `total`. Runs a COUNT over every matching row, so it is markedly slower on large result sets; omit it and use `hasMore` / `nextCursor` to paginate"),
 }).passthrough();
 
-export const summaryQuerySchema = z.object({
-  ...withNetwork,
-  address: stellarAddressSchema,
-  contractId: optionalQueryString("Token contract ID to filter by"),
-  fromDate: optionalQueryDateTime("Inclusive lower bound on ledgerClosedAt"),
-  toDate: optionalQueryDateTime("Inclusive upper bound on ledgerClosedAt"),
-}).passthrough();
+export const summaryQuerySchema = transferQuerySchema
+  .pick({
+    network: true,
+    address: true,
+    contractId: true,
+    fromDate: true,
+    toDate: true,
+  })
+  .passthrough();
 
 /**
  * What `GET /accounts/{address}/summary` takes.
@@ -608,9 +610,7 @@ export const webhookDeleteParamsSchema = z.object({
   id: z.coerce.number().int(),
 }).passthrough();
 
-export const webhookDeliveriesParamsSchema = z.object({
-  id: z.coerce.number().int(),
-}).passthrough();
+export const webhookDeliveriesParamsSchema = webhookDeleteParamsSchema;
 
 export const webhookCreateBodySchema = webhookCreateRequestSchema;
 
@@ -667,7 +667,7 @@ export const tokenMetadataSchema = z.object({
   decimals: z.number().int(),
 });
 
-export const tokensQuerySchema = z.object({ ...withNetwork }).passthrough();
+export const tokensQuerySchema = statusQuerySchema;
 
 export const tokensResponseSchema = z.object({
   ok: z.literal(true),
