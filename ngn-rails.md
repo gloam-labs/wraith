@@ -518,10 +518,14 @@ id belongs to": the offramp table first, then `NgnOrder`. An id in neither is
 logged and ignored; nothing here creates a row, because an event for an order we
 never placed is not ours to act on.
 
-Reconciliation is idempotent per event — it writes settled figures to a row keyed
-on the order id, so a redelivery writes the same values rather than
-double-counting. It is not order-safe: a late redelivery of an earlier event wins
-until the next status poll ([idempotency.md](./idempotency.md)). The 200 is sent *before* reconciling, because Linq times out at
+Reconciliation is idempotent per event and order-safe for finished orders — it
+writes settled figures to a row keyed on the order id, ignores late non-terminal
+events (such as `order.processing` arriving after `order.completed` or
+`order.failed`) with a single log line so status, settled amounts and
+`orders_terminal_total` stay intact, and still lets through subsequent terminal
+statuses (`refunded`), failure endings (`rejected`), and refunds/reversals in
+progress (`refund_pending` — updating status for the sweep first and recording a
+money failure when the final ending arrives; [idempotency.md](./idempotency.md)). The 200 is sent *before* reconciling, because Linq times out at
 10 seconds and marks the delivery failed, and a database write on a throttled
 instance can outlast that.
 
