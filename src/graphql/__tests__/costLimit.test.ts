@@ -15,20 +15,31 @@
  *  - the shapes the limiter exists for — cheap to write, expensive to run:
  *    deep nesting and a wide field selection.
  *
- * Nothing here reaches a database or a provider; the plugin only parses.
+ * Nothing here reaches a database or a provider; the plugin only reads the
+ * document Apollo parsed.
+ *
+ * #404: the refusal is thrown from the listener's didResolveOperation, not
+ * from requestDidStart — Apollo Server answers a requestDidStart throw with
+ * a masked 500, and a refusal is a client error. The harness below drives
+ * the hook Apollo actually calls; every limit assertion is unchanged.
  */
 import { ApolloServer } from "@apollo/server";
-import { GraphQLError } from "graphql";
+import { GraphQLError, parse, type DocumentNode } from "graphql";
 import { costLimitPlugin, type CostLimitOptions } from "../costLimit";
 
-type RequestContext = Parameters<
-  NonNullable<ReturnType<typeof costLimitPlugin>["requestDidStart"]>
->[0];
+type PluginListener = {
+  didResolveOperation?: (context: { document?: DocumentNode }) => Promise<void>;
+};
 
-/** Run the plugin's request hook on `query`, the way Apollo Server does. */
+/** Run the plugin's refusal hook on `query`, the way Apollo Server does. */
 async function requestDidStart(query: string | undefined, options?: CostLimitOptions): Promise<void> {
-  const hook = costLimitPlugin(options).requestDidStart;
-  await hook?.({ request: { query } } as unknown as RequestContext);
+  const plugin = costLimitPlugin(options) as {
+    requestDidStart?: () => Promise<PluginListener | void>;
+  };
+  const listener = await plugin.requestDidStart?.();
+  await listener?.didResolveOperation?.({
+    document: query === undefined ? undefined : parse(query),
+  });
 }
 
 /** A query nested `levels` fields deep — few fields, all of them nested. */
@@ -46,15 +57,12 @@ describe("costLimitPlugin", () => {
       await expect(requestDidStart("{ health { ok version } }")).resolves.toBeUndefined();
     });
 
-    it("does nothing when there is no query to judge", async () => {
+    // The limiter used to parse the query itself and step aside on a syntax
+    // error. Apollo parses now, so a query that never parsed never reaches
+    // this hook at all — a syntax error stays GraphQL validation's problem,
+    // and the hook's remaining duty is to do nothing with no document.
+    it("does nothing when there is no document to judge", async () => {
       await expect(requestDidStart(undefined)).resolves.toBeUndefined();
-    });
-
-    // The limiter parses to measure; a syntax error is GraphQL validation's
-    // problem, not the limiter's, and must not be swallowed or re-thrown as a
-    // cost refusal.
-    it("leaves a query it cannot parse to GraphQL's own validation", async () => {
-      await expect(requestDidStart("{ health { ok ")).resolves.toBeUndefined();
     });
   });
 
@@ -110,6 +118,22 @@ describe("costLimitPlugin", () => {
         "Query depth 11 exceeds the maximum allowed depth of 10",
       );
     });
+
+    // #404: a refusal is a client error — HTTP 400 via extensions.http, with
+    // a stable extensions.code a caller can switch on, not a masked 500.
+    it("refuses as a client error: status 400 and a stable code", async () => {
+      const costRefusal = await requestDidStart("{ health { ok version } }", { maxCost: 2 }).catch(
+        (e: unknown) => e,
+      );
+      expect(costRefusal).toBeInstanceOf(GraphQLError);
+      expect((costRefusal as GraphQLError).extensions.code).toBe("QUERY_TOO_COSTLY");
+      expect((costRefusal as GraphQLError).extensions.http).toEqual({ status: 400 });
+
+      const depthRefusal = await requestDidStart(deeplyNested(11)).catch((e: unknown) => e);
+      expect(depthRefusal).toBeInstanceOf(GraphQLError);
+      expect((depthRefusal as GraphQLError).extensions.code).toBe("QUERY_TOO_DEEP");
+      expect((depthRefusal as GraphQLError).extensions.http).toEqual({ status: 400 });
+    });
   });
 
   // Unit-driving the hook pins the refusal's wording; this pins that the
@@ -153,14 +177,21 @@ describe("costLimitPlugin", () => {
       expect(health).toHaveBeenCalledTimes(1);
     });
 
-    // A refusal in requestDidStart fails the whole request in Apollo Server —
-    // no response, and above all no resolver work. The limiter's job is to
-    // refuse before anything expensive happens, so the resolver not running
-    // is the assertion that matters.
+    // A refusal in didResolveOperation fails the whole request in Apollo
+    // Server — an error response, and above all no resolver work. The
+    // limiter's job is to refuse before anything expensive happens, so the
+    // resolver not running is the assertion that matters. #404: the error
+    // response is the refusal itself — real message, stable code, HTTP 400 —
+    // where Apollo used to answer a masked 500 for a requestDidStart throw.
     it("refuses an over-cost query before any resolver runs", async () => {
-      await expect(
-        server.executeOperation({ query: "{ health { ok version } }" }),
-      ).rejects.toThrow();
+      const res = await server.executeOperation({ query: "{ health { ok version } }" });
+      if (res.body?.kind !== "single") throw new Error("expected a single result");
+      expect(res.http.status).toBe(400);
+      expect(res.body.singleResult.data).toBeUndefined();
+      expect(res.body.singleResult.errors?.[0]?.message).toBe(
+        "Query cost 3 exceeds the maximum allowed cost of 2",
+      );
+      expect(res.body.singleResult.errors?.[0]?.extensions?.code).toBe("QUERY_TOO_COSTLY");
       expect(health).not.toHaveBeenCalled();
     });
   });

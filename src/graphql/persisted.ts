@@ -105,16 +105,37 @@ export function resetPersistedQueryCache(): void {
   allowList = null;
 }
 
+/**
+ * A production refusal as a client error (#404).
+ *
+ * The refusal is thrown from the request listener's didResolveOperation,
+ * not from requestDidStart: Apollo Server treats an error thrown by
+ * requestDidStart itself as a server fault — HTTP 500 with the message
+ * masked as "Internal server error" — while an error thrown from
+ * didResolveOperation reaches the client as-is, and extensions.http sets
+ * the response status. didResolveOperation runs before any resolver, so a
+ * refused request still does no resolver work.
+ */
+function refusal(message: string, code: string): GraphQLError {
+  return new GraphQLError(message, { extensions: { code, http: { status: 400 } } });
+}
+
 export const persistedQueryPlugin: ApolloServerPlugin<BaseContext> = {
   async requestDidStart(requestContext) {
     const { request } = requestContext;
     const hash = request?.extensions?.persistedQuery?.sha256Hash;
+    const production = process.env.NODE_ENV === "production";
 
     if (!hash) {
-      if (process.env.NODE_ENV === "production") {
-        throw new GraphQLError("Persisted query hash is required in production");
+      if (!production) {
+        return;
       }
-      return;
+
+      return {
+        async didResolveOperation() {
+          throw refusal("Persisted query hash is required in production", "PERSISTED_QUERY_REQUIRED");
+        },
+      };
     }
 
     const query = getPersistedQuery(hash);
@@ -124,8 +145,25 @@ export const persistedQueryPlugin: ApolloServerPlugin<BaseContext> = {
       return;
     }
 
-    if (process.env.NODE_ENV === "production") {
-      throw new GraphQLError(`Persisted query not found for hash ${hash}`);
+    if (!production) {
+      return;
     }
+
+    // Unknown hash in production. Keep Apollo's built-in persisted-query
+    // handling from answering first — with support disabled it would reply
+    // "PersistedQueryNotSupported" with a 200 — by dropping the extension,
+    // and stand in a query that parses when the client sent none, purely so
+    // the pipeline reaches didResolveOperation; the refusal throws there
+    // before anything executes, so the stand-in never runs.
+    delete request.extensions?.persistedQuery;
+    if (!request.query) {
+      request.query = "{ __typename }";
+    }
+
+    return {
+      async didResolveOperation() {
+        throw refusal(`Persisted query not found for hash ${hash}`, "PERSISTED_QUERY_NOT_FOUND");
+      },
+    };
   },
 };

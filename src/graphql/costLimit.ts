@@ -1,5 +1,5 @@
 import type { ApolloServerPlugin, BaseContext } from "@apollo/server";
-import { DocumentNode, GraphQLError, Kind, parse, visit } from "graphql";
+import { DocumentNode, GraphQLError, Kind, visit } from "graphql";
 
 export interface CostLimitOptions {
   maxDepth?: number;
@@ -46,32 +46,41 @@ export function costLimitPlugin(options: CostLimitOptions = {}): ApolloServerPlu
   const maxCost = options.maxCost ?? 1000;
 
   return {
-    async requestDidStart(requestContext) {
-      const query = requestContext.request?.query;
-      if (!query) {
-        return;
-      }
+    async requestDidStart() {
+      return {
+        // Refuse from didResolveOperation, not requestDidStart (#404).
+        // Apollo Server treats an error thrown by requestDidStart itself as
+        // a server fault — HTTP 500 with the message masked as "Internal
+        // server error" — while an error thrown from didResolveOperation is
+        // sent to the client as-is, and a GraphQLError carrying
+        // extensions.http sets the response status. A refusal is the
+        // client's problem to fix, so it answers 400 with a stable code.
+        // didResolveOperation runs after parsing and validation and before
+        // any resolver, so the limits still refuse before any work is done;
+        // the document Apollo parsed is judged, so there is nothing to
+        // re-parse here and a syntax error stays validation's problem.
+        async didResolveOperation({ document }) {
+          if (!document) {
+            return;
+          }
 
-      let doc: DocumentNode;
-      try {
-        doc = parse(query);
-      } catch {
-        return;
-      }
+          const depth = computeDepth(document);
+          if (depth > maxDepth) {
+            throw new GraphQLError(
+              `Query depth ${depth} exceeds the maximum allowed depth of ${maxDepth}`,
+              { extensions: { code: "QUERY_TOO_DEEP", http: { status: 400 } } }
+            );
+          }
 
-      const depth = computeDepth(doc);
-      if (depth > maxDepth) {
-        throw new GraphQLError(
-          `Query depth ${depth} exceeds the maximum allowed depth of ${maxDepth}`
-        );
-      }
-
-      const cost = computeCost(doc, options);
-      if (cost > maxCost) {
-        throw new GraphQLError(
-          `Query cost ${cost} exceeds the maximum allowed cost of ${maxCost}`
-        );
-      }
+          const cost = computeCost(document, options);
+          if (cost > maxCost) {
+            throw new GraphQLError(
+              `Query cost ${cost} exceeds the maximum allowed cost of ${maxCost}`,
+              { extensions: { code: "QUERY_TOO_COSTLY", http: { status: 400 } } }
+            );
+          }
+        },
+      };
     },
   };
 }

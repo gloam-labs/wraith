@@ -1,5 +1,6 @@
 import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@as-integrations/express5";
+import { GraphQLError } from "graphql";
 import {
   queryAllTransfers,
   queryByTxHash,
@@ -7,6 +8,7 @@ import {
   queryTransfers,
 } from "../db";
 import { costLimitPlugin } from "./costLimit";
+import { formatGraphQLError } from "./formatError";
 import { persistedQueryPlugin } from "./persisted";
 import { requestNetwork } from "../middleware/network";
 import { enabledNetworks, isNetwork, NETWORKS, currentNetwork, type Network } from "../network";
@@ -117,17 +119,28 @@ export interface GraphQLContext {
  * than returning nothing: an empty list would read as "no such transfers"
  * instead of "this process has never indexed that chain".
  */
+/**
+ * A deliberate client error from a resolver. The BAD_USER_INPUT code is
+ * load-bearing: formatGraphQLError masks every error that arrives without
+ * a code of its own (Apollo stamps those INTERNAL_SERVER_ERROR) as a server
+ * fault, so an un-coded throw here would be hidden from the caller it was
+ * written for.
+ */
+function badUserInput(message: string): GraphQLError {
+  return new GraphQLError(message, { extensions: { code: "BAD_USER_INPUT" } });
+}
+
 function resolveArgNetwork(arg: NetworkArg | undefined, ctx: GraphQLContext | undefined): Network {
   if (arg === undefined) return ctx?.network ?? currentNetwork();
 
   const normalised = arg.toLowerCase();
   if (!isNetwork(normalised)) {
-    throw new Error(`Invalid network: "${arg}". Valid values: ${NETWORKS.join(", ")}.`);
+    throw badUserInput(`Invalid network: "${arg}". Valid values: ${NETWORKS.join(", ")}.`);
   }
 
   const enabled = enabledNetworks();
   if (!enabled.includes(normalised)) {
-    throw new Error(
+    throw badUserInput(
       `Network "${normalised}" is not enabled on this deployment. Enabled networks: ${enabled.join(", ")}.`
     );
   }
@@ -190,7 +203,7 @@ function parseTransfersArgs(args: TransfersArgs) {
     includeTotal: args.includeTotal ?? undefined,
   });
   if (!parsed.success) {
-    throw new Error(
+    throw badUserInput(
       `Invalid transfers arguments: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
     );
   }
@@ -199,7 +212,7 @@ function parseTransfersArgs(args: TransfersArgs) {
   if (cursor !== undefined) {
     const cursorId = decodeCursor(cursor);
     if (cursorId === undefined || !Number.isInteger(cursorId) || cursorId <= 0) {
-      throw new Error(
+      throw badUserInput(
         `Invalid cursor: "${args.cursor}". Pass back the nextCursor from a previous page.`,
       );
     }
@@ -327,6 +340,10 @@ export function createGraphQLMiddleware() {
     typeDefs,
     resolvers,
     persistedQueries: false,
+    // Only the plugins' refusals (and other coded, deliberate client
+    // errors) reach the client with their real message; a genuinely
+    // unexpected failure is masked as "Internal server error" (#404).
+    formatError: formatGraphQLError,
     plugins: [
       persistedQueryPlugin,
       costLimitPlugin({
