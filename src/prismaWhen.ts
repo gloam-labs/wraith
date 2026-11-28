@@ -14,12 +14,15 @@ export type ExactKeys<Target, Patch> = [Target] extends [never]
   ? never
   : Patch & Record<Exclude<keyof Patch, keyof Target>, never>;
 
+// For TypeScript compatibility across all versions:
+export type SafeNoInfer<T> = [T][T extends any ? 0 : never];
+
 export function when<
   Target = never,
-  Patch extends Partial<NoInfer<Target>> = Partial<NoInfer<Target>>,
+  Patch extends Partial<SafeNoInfer<Target>> = Partial<SafeNoInfer<Target>>,
 >(
   condition: unknown,
-  patch: ExactKeys<NoInfer<Target>, Patch>,
-): Partial<NoInfer<Target>> {
+  patch: ExactKeys<SafeNoInfer<Target>, Patch>,
+): Partial<SafeNoInfer<Target>> {
   return condition ? patch : {};
 }

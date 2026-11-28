@@ -176,12 +176,6 @@ async function recordAttempt(
   now: Date,
   needsHuman: boolean,
 ): Promise<void> {
-  const data: Prisma.NgnOrderUpdateInput = {
-    reconciliationAttempts: attempts,
-    lastReconciledAt: now,
-    ...when<Prisma.NgnOrderUpdateInput>(needsHuman, { needsHuman: true }),
-  };
-
   if (candidate.kind === "ngn") {
     await prisma.ngnOrder.update({
       where: {
@@ -190,7 +184,11 @@ async function recordAttempt(
           orderId: candidate.row.orderId,
         },
       },
-      data,
+      data: {
+        reconciliationAttempts: attempts,
+        lastReconciledAt: now,
+        ...when<Prisma.NgnOrderUpdateInput>(needsHuman, { needsHuman: true }),
+      },
     });
     return;
   }
@@ -202,7 +200,11 @@ async function recordAttempt(
         orderId: candidate.row.orderId,
       },
     },
-    data,
+    data: {
+      reconciliationAttempts: attempts,
+      lastReconciledAt: now,
+      ...when<Prisma.OfframpOrderUpdateInput>(needsHuman, { needsHuman: true }),
+    },
   });
 }
 
