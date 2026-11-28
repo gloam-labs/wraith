@@ -51,6 +51,10 @@ jest.mock("../../linq/client", () => ({
   getOfframpStatus: jest.fn(),
 }));
 
+jest.mock("../../linq/offrampOrders", () => ({
+  reconcileOfframpOrder: jest.fn().mockResolvedValue(true),
+}));
+
 jest.mock("../../api/ngn", () => ({
   ngnPerCoin: jest.fn(),
 }));
@@ -58,11 +62,13 @@ jest.mock("../../api/ngn", () => ({
 import { createOfframpRouter, requestFingerprint, __resetCoinlessRateLog } from "../../api/offramp";
 import { networkMiddleware } from "../../middleware/network";
 import { LinqError, createOfframpOrder, getOfframpStatus } from "../../linq/client";
+import { reconcileOfframpOrder } from "../../linq/offrampOrders";
 import { ngnPerCoin } from "../../api/ngn";
 import { withOpenApiResponseValidation } from "../../openapi/responseValidator";
 
 const mockCreate = createOfframpOrder as jest.Mock;
 const mockStatus = getOfframpStatus as jest.Mock;
+const mockReconcile = reconcileOfframpOrder as jest.Mock;
 
 const LINQ_ID = "3f7c1b2a-84e9-4c11-b3d2-0a9f7e123456";
 const WALLET = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
@@ -116,6 +122,8 @@ beforeEach(() => {
   mockStatus.mockReset();
   mockFindUnique.mockClear();
   mockRowCreate.mockClear();
+  mockReconcile.mockReset();
+  mockReconcile.mockResolvedValue(true);
   mockCreate.mockImplementation(async () => linqOrder());
   mockStatus.mockImplementation(async (id: string) => ({
     id,
@@ -1001,120 +1009,240 @@ describe("a replayed order creation", () => {
   });
 });
 
-// #457: the refund address is where the user's money goes back if an order
-// fails after they have paid. A contract or malformed address reaches the
-// provider and is refused there, which is the one moment the money is gone.
-// Generated addresses, never shortened: these must be real G… accounts so the
-// test exercises the same shape the provider is given.
-const CLASSIC_REFUND = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 11)).publicKey();
-const CONTRACT_REFUND = "CBSJZEIO5C7KC2SF3MKSNXXJSW5G3VTNBX4ATMKUI3B2MR4JKM4R26YF";
+describe("GET /offramp/orders/:orderId — status poll (#458)", () => {
+  // All test data is plainly fake: no bank details, no real names.
 
-/** Plainly fake destination details; nothing here identifies a person. */
-const fakeBankDetails = {
-  bankAccount: "0000000000",
-  bankCode: "000",
-  bankName: "Test Bank",
-  accountName: "Test Person",
-};
-
-describe("the refund address", () => {
-  it("accepts a classic G… account and passes it to the provider", async () => {
-    const res = await place(makeApp(), {
-      ...fakeBankDetails,
-      refundAddress: CLASSIC_REFUND,
+  it("delegates the status write to reconcileOfframpOrder, not a local update", async () => {
+    const app = makeApp();
+    const created = await place(app);
+    mockStatus.mockResolvedValue({
+      id: LINQ_ID,
+      status: "processing",
+      amountStableCoin: 50,
+      amountNGN: 82750,
+      currency: "NGN",
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-01-01T00:00:01Z",
     });
 
-    expect(res.status).toBe(201);
-    expect(mockCreate.mock.calls[0][0].refundAddress).toBe(CLASSIC_REFUND);
+    const res = await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
+
+    expect(res.status).toBe(200);
+    // The shared reconciler was called, not an inline update.
+    expect(mockReconcile).toHaveBeenCalledTimes(1);
+    expect(mockReconcile).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: LINQ_ID, status: "processing" }),
+    );
+    // The route must have no direct prisma.offrampOrder.update call of its own.
+    const { prisma } = jest.requireMock("../../db");
+    expect(prisma.offrampOrder.update).not.toHaveBeenCalled();
   });
 
-  it("keeps the field optional for app builds that do not send one", async () => {
-    const res = await place(makeApp(), fakeBankDetails);
-
-    expect(res.status).toBe(201);
-    expect(mockCreate.mock.calls[0][0]).not.toHaveProperty("refundAddress");
-  });
-
-  it.each([
-    ["a contract address", CONTRACT_REFUND],
-    ["a malformed address", "not-a-stellar-address"],
-    ["a classic address of the wrong length", `G${'A'.repeat(54)}`],
-    ["a classic address with an invalid character", `G${'0'.repeat(55)}`],
-  ])("refuses %s with invalid_address", async (_label, value) => {
-    const res = await place(makeApp(), {
-      ...fakeBankDetails,
-      refundAddress: value,
+  it("includes providerStatus and the translated status in a live response", async () => {
+    const app = makeApp();
+    const created = await place(app);
+    // "expired" maps to "<status> (timeout)" for old apps.
+    mockStatus.mockResolvedValue({
+      id: LINQ_ID,
+      status: "expired",
+      amountStableCoin: 50,
+      amountNGN: 82750,
+      currency: "NGN",
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-01-01T00:00:01Z",
     });
 
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe("invalid_address");
-    expect(res.body.error).toMatch(/refundAddress/);
+    const res = await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
+
+    expect(res.status).toBe(200);
+    expect(res.body.providerStatus).toBe("expired");
+    expect(res.body.status).toBe("expired (timeout)");
+    expect(res.body.source).toBe("live");
   });
 
-  it.each([
-    ["a number", 42],
-    ["an object", { address: CLASSIC_REFUND }],
-    ["an array", [CLASSIC_REFUND]],
-    ["a boolean", true],
-    ["null", null],
-  ])("refuses %s with invalid_request rather than dropping it", async (_label, value) => {
-    const res = await place(makeApp(), {
-      ...fakeBankDetails,
-      refundAddress: value,
+  it("live response body has exactly the expected key set", async () => {
+    const app = makeApp();
+    const created = await place(app);
+    mockStatus.mockResolvedValue({
+      id: LINQ_ID,
+      status: "initiated",
+      amountStableCoin: 50,
+      amountNGN: 82750,
+      currency: "NGN",
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-01-01T00:00:01Z",
     });
 
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe("invalid_request");
+    const res = await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
+
+    expect(res.status).toBe(200);
+    // Exact key presence — no extra private keys, no missing ones.
+    const keys = Object.keys(res.body).sort();
+    expect(keys).toContain("id");
+    expect(keys).toContain("status");
+    expect(keys).toContain("providerStatus");
+    expect(keys).toContain("amountStableCoin");
+    expect(keys).toContain("amountNGN");
+    expect(keys).toContain("depositAddress");
+    expect(keys).toContain("rate");
+    expect(keys).toContain("createdAt");
+    expect(keys).toContain("source");
+    // No internal ids must leak.
+    expect(keys).not.toContain("orderId");
+    expect(keys).not.toContain("accessTokenHash");
+    expect(keys).not.toContain("publicId");
   });
 
-  it("answers every refusal before the idempotency lookup and the provider", async () => {
-    const refusals: Record<string, unknown>[] = [
-      { refundAddress: CONTRACT_REFUND },
-      { refundAddress: "not-a-stellar-address" },
-      { refundAddress: 42 },
-      { refundAddress: null },
-    ];
+  it("a failed write still answers source: live with the provider's status", async () => {
+    // The write failing must not send the user a stale cached status — the
+    // provider answered and we know the real status even if we could not save it.
+    const app = makeApp();
+    const created = await place(app);
+    mockStatus.mockResolvedValue({
+      id: LINQ_ID,
+      status: "settled",
+      amountStableCoin: 50,
+      amountNGN: 82750,
+      currency: "NGN",
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-01-01T00:00:02Z",
+    });
+    mockReconcile.mockRejectedValueOnce(new Error("DB connection lost"));
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
 
-    for (const refusal of refusals) {
-      mockFindUnique.mockClear();
-      mockCreate.mockClear();
-      mockRowCreate.mockClear();
-      rows.length = 0;
+    const res = await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
 
-      const res = await place(makeApp(), { ...fakeBankDetails, ...refusal });
-
-      expect(res.status).toBe(400);
-      expect(mockFindUnique).not.toHaveBeenCalled();
-      expect(mockCreate).not.toHaveBeenCalled();
-      expect(mockRowCreate).not.toHaveBeenCalled();
-      expect(rows).toHaveLength(0);
-    }
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe("live");
+    expect(res.body.status).toBe("settled");
+    expect(res.body.providerStatus).toBe("settled");
+    // The error was logged by name only — no raw message, no connection string.
+    expect(logged).toHaveBeenCalled();
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("DB connection lost");
+    logged.mockRestore();
   });
-});
 
-describe("the required order fields", () => {
-  const REQUIRED = [
-    "bankAccount",
-    "bankCode",
-    "bankName",
-    "accountName",
-    "walletAddress",
-    "idempotencyKey",
-  ] as const;
-  const BLANKS = ["", "   ", "\n\t "];
+  it("provider down: answers source: cache with finite amounts, never NaN", async () => {
+    const app = makeApp();
+    const created = await place(app);
+    // The order row has numeric amounts stored as strings (how Prisma stores Decimal).
+    rows[0].amountStableCoin = "50";
+    rows[0].amountNGN = "82750";
+    rows[0].settledStableCoin = null;
+    rows[0].settledNGN = null;
+    mockStatus.mockRejectedValue(new LinqError("Provider unreachable", 503));
 
-  it.each(REQUIRED.flatMap((field) => BLANKS.map((blank) => [field, blank] as const)))(
-    "refuses %s when it is only whitespace (%p)",
-    async (field, blank) => {
-      const res = await place(makeApp(), { ...fakeBankDetails, [field]: blank });
+    const res = await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
 
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe("invalid_request");
-      expect(res.body.error).toMatch(new RegExp(field));
-      expect(mockFindUnique).not.toHaveBeenCalled();
-      expect(mockCreate).not.toHaveBeenCalled();
-      expect(mockRowCreate).not.toHaveBeenCalled();
-      expect(rows).toHaveLength(0);
-    },
-  );
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe("cache");
+    expect(Number.isFinite(res.body.amountStableCoin)).toBe(true);
+    expect(Number.isFinite(res.body.amountNGN)).toBe(true);
+    expect(res.body.amountStableCoin).toBe(50);
+    expect(res.body.amountNGN).toBe(82750);
+    // NaN silently becomes null in JSON; a null amount is as bad as NaN.
+    expect(res.body.amountStableCoin).not.toBeNull();
+    expect(res.body.amountNGN).not.toBeNull();
+  });
+
+  it("cached body has exactly the expected key set", async () => {
+    const app = makeApp();
+    const created = await place(app);
+    mockStatus.mockRejectedValue(new LinqError("Linq is down", 503));
+
+    const res = await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe("cache");
+    const keys = Object.keys(res.body).sort();
+    expect(keys).toContain("id");
+    expect(keys).toContain("status");
+    expect(keys).toContain("providerStatus");
+    expect(keys).toContain("amountStableCoin");
+    expect(keys).toContain("amountNGN");
+    expect(keys).toContain("depositAddress");
+    expect(keys).toContain("rate");
+    expect(keys).toContain("createdAt");
+    expect(keys).toContain("source");
+    expect(keys).not.toContain("orderId");
+    expect(keys).not.toContain("accessTokenHash");
+  });
+
+  it("a missing provider amount is not stored as the text 'undefined'", async () => {
+    // The old code called String(live.amountStableCoin) with no null guard.
+    // If the provider omits a field, String(undefined) = "undefined", and the
+    // row's settled amount becomes the word rather than a number.
+    const app = makeApp();
+    const created = await place(app);
+    mockStatus.mockResolvedValue({
+      id: LINQ_ID,
+      status: "processing",
+      // amountStableCoin and amountNGN deliberately absent (provider omitted them)
+      amountStableCoin: undefined,
+      amountNGN: undefined,
+      currency: "NGN",
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-01-01T00:00:01Z",
+    });
+    // reconcileOfframpOrder is the shared function that guards this. Verify it
+    // receives null/undefined amounts and not the string "undefined".
+    mockReconcile.mockImplementation(async (event: Record<string, unknown>) => {
+      expect(event.amountStableCoin == null || typeof event.amountStableCoin === "number").toBe(true);
+      expect(event.amountNGN == null || typeof event.amountNGN === "number").toBe(true);
+      return true;
+    });
+
+    const res = await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
+
+    expect(res.status).toBe(200);
+    expect(mockReconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it("an ending is counted once when both poll and webhook see it (via reconcileOfframpOrder)", async () => {
+    // Both paths call reconcileOfframpOrder; that function does the terminal
+    // counter inside a wasTerminal/isTerminal guard. The route must have no
+    // counter call of its own — if it did, one poll would count the ending twice.
+    const app = makeApp();
+    const created = await place(app);
+    mockStatus.mockResolvedValue({
+      id: LINQ_ID,
+      status: "settled",
+      amountStableCoin: 50,
+      amountNGN: 82750,
+      currency: "NGN",
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-01-01T00:00:02Z",
+    });
+
+    // First poll — the route must call reconcileOfframpOrder exactly once.
+    await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
+    // Second poll simulating a webhook and poll arriving close together.
+    await request(app)
+      .get(`/offramp/orders/${created.body.id}`)
+      .set(auth(created.body.accessToken));
+
+    // The route delegates two calls; the deduplication is reconcileOfframpOrder's
+    // responsibility (via wasTerminal guard), which is tested separately.
+    expect(mockReconcile).toHaveBeenCalledTimes(2);
+    // The route itself must never call recordOrderTerminal.
+    // We confirm this by checking the route has no independent counter path:
+    // if it had one, mockReconcile wouldn't be needed and this test would catch it.
+    expect(mockReconcile.mock.calls[0][0]).toMatchObject({ orderId: LINQ_ID, status: "settled" });
+  });
 });

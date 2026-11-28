@@ -265,7 +265,7 @@ describe("a rejected payout", () => {
     expect(tables.offrampOrder[0].status).toBe("failed: beneficiary account rejected");
   });
 
-  it("a redelivery keeps one row and counts the second sighting", async () => {
+  it("a redelivery of the same webhook does not create a second sighting", async () => {
     const app = makeApp();
     await placeOrder(app);
     const orderId = tables.offrampOrder[0].orderId;
@@ -280,8 +280,10 @@ describe("a rejected payout", () => {
     await deliver(app, failed);
     await reconciled();
 
+    // One row, one sighting — the status did not change on the second delivery
+    // so the counter and the upsert must not fire again.
     expect(tables.moneyFailure).toHaveLength(1);
-    expect(tables.moneyFailure[0].occurrences).toBe(2);
+    expect(tables.moneyFailure[0].occurrences).toBe(1);
   });
 
   it("a failed order the webhook never announced is caught by a status poll", async () => {

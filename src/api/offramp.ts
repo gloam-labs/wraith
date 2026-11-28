@@ -5,7 +5,7 @@ import type { OfframpOrder } from "@prisma/client";
 
 import { prisma } from "../db";
 import { requestNetwork } from "../middleware/network";
-import { recordOrderCreated, recordOrderTerminal, terminalStatusOf } from "../metrics";
+import { recordOrderCreated } from "../metrics";
 import { statusForClients } from "../linq/statusForClients";
 import {
   bearerToken,
@@ -18,7 +18,7 @@ import {
   getOfframpStatus,
   verifyBank,
 } from "../linq/client";
-import { isFailureStatus, recordMoneyFailure } from "../linq/moneyFailures";
+import { reconcileOfframpOrder } from "../linq/offrampOrders";
 import { ngnPerCoin } from "./ngn";
 import { rejectContractAddress } from "./address";
 import { amountSchema } from "./amount";
@@ -658,69 +658,65 @@ export function createOfframpRouter(
     // webhook is a push we might have missed - a sleeping instance, a failed
     // delivery - and a wallet showing "waiting for deposit" against an order
     // that settled twenty minutes ago is worse than a slow answer.
+    let live: Awaited<ReturnType<typeof getOfframpStatus>>;
     try {
-      const live = await getOfframpStatus(row.orderId);
-      const wasTerminal = terminalStatusOf(row.status);
-      const isTerminal = terminalStatusOf(live.status);
-      if (live.status !== row.status) {
-        await prisma.offrampOrder.update({
-          where: { network_orderId: { network: net, orderId: row.orderId } },
-          data: {
-            status: live.status,
-            settledStableCoin: String(live.amountStableCoin),
-            settledNGN: String(live.amountNGN),
-          },
-        });
-
-        // The webhook is a push we might have missed, and this poll is what
-        // catches one up — including the case that matters most. An order that
-        // ended failed means the user's crypto was taken and the naira payout
-        // did not complete; if the `order.failed` delivery never arrived, this
-        // poll is the only thing that ever learns it. Recorded under the same
-        // (network, kind, orderId) row the webhook path uses, so when both
-        // fire it is one incident, not two.
-        if (isFailureStatus(live.status)) {
-          await recordMoneyFailure({
-            network: net,
-            rail: "offramp",
-            kind: "payout_rejected",
-            orderId: row.orderId,
-            publicId: row.publicId,
-            providerCode: live.status,
-            message: `Offramp order ended as "${live.status}" — the naira payout did not complete.`,
-          });
-        }
-      }
-      if (isTerminal && !wasTerminal) recordOrderTerminal("offramp", live.status);
-      res.json({
-        ...live,
-        id: row.publicId,
-        status: statusForClients(live.status),
-        providerStatus: live.status,
-        depositAddress: row.depositAddress,
-        // The rate and the creation time live in our row, not in the provider's
-        // status. Without them a wallet that reopens an order in flight shows
-        // "₦0 / USDC" and a countdown with no start, which reads as expired.
-        rate: Number(row.rate),
-        createdAt: row.createdAt.toISOString(),
-        source: "live",
-      });
+      live = await getOfframpStatus(row.orderId);
     } catch {
-      // Provider unreachable: our row is stale but true as of the last update, and
-      // saying so beats failing the request outright. Nothing of the upstream
-      // failure is passed on.
+      // Provider unreachable: our row is stale but true as of the last update,
+      // and saying so beats failing the request outright. Amounts are coerced
+      // through Number() — if a previous poll stored "undefined" or any
+      // non-numeric text the result would be NaN, which JSON.stringify drops
+      // entirely. Guard with isFinite and fall back to the order amount instead.
+      const stableCoin = row.settledStableCoin != null ? Number(row.settledStableCoin) : NaN;
+      const ngn = row.settledNGN != null ? Number(row.settledNGN) : NaN;
       res.json({
         id: row.publicId,
         status: statusForClients(row.status),
         providerStatus: row.status,
-        amountStableCoin: Number(row.settledStableCoin ?? row.amountStableCoin),
-        amountNGN: Number(row.settledNGN ?? row.amountNGN),
+        amountStableCoin: isFinite(stableCoin) ? stableCoin : Number(row.amountStableCoin),
+        amountNGN: isFinite(ngn) ? ngn : Number(row.amountNGN),
         depositAddress: row.depositAddress,
         rate: Number(row.rate),
         createdAt: row.createdAt.toISOString(),
         source: "cache",
       });
+      return;
     }
+
+    // The provider answered. Write the status through the shared reconcile
+    // function — the same path the webhook and the periodic sweep use — so
+    // the duplicate inline update, failure record and counter call are gone.
+    // A write failure must not suppress the live status we just read; answer
+    // with source:"live" either way, and log only the error name.
+    try {
+      await reconcileOfframpOrder({
+        orderId: row.orderId,
+        network: net,
+        status: live.status,
+        event: live.status,
+        amountStableCoin: live.amountStableCoin,
+        amountNGN: live.amountNGN,
+      });
+    } catch (writeErr) {
+      console.error(
+        "[offramp] status write failed after live poll:",
+        (writeErr as Error)?.name ?? "unknown error",
+      );
+    }
+
+    res.json({
+      ...live,
+      id: row.publicId,
+      status: statusForClients(live.status),
+      providerStatus: live.status,
+      depositAddress: row.depositAddress,
+      // The rate and the creation time live in our row, not in the provider's
+      // status. Without them a wallet that reopens an order in flight shows
+      // "₦0 / USDC" and a countdown with no start, which reads as expired.
+      rate: Number(row.rate),
+      createdAt: row.createdAt.toISOString(),
+      source: "live",
+    });
   });
 
   return router;
