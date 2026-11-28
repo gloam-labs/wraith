@@ -18,7 +18,7 @@ function monthsBetween(start: Date, end: Date): number {
   return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
 }
 
-function inferPartitionRangeEnd(name: string): Date | null {
+export function inferPartitionRangeEnd(name: string): Date | null {
   const match = name.match(/_(\d{4})(\d{2})(\d{2})?$/);
   if (!match) return null;
 
@@ -26,7 +26,7 @@ function inferPartitionRangeEnd(name: string): Date | null {
   return new Date(Date.UTC(parseInt(year, 10), parseInt(month, 10) - 1, day ? parseInt(day, 10) : 1));
 }
 
-function formatQualifiedIdentifier(identifier: string): string {
+export function formatQualifiedIdentifier(identifier: string): string {
   return identifier
     .split(".")
     .filter(Boolean)
@@ -62,9 +62,11 @@ export function planPartitionRetention(
 export async function runPartitionRetentionJob(options?: {
   compressionWindowMonths?: number;
   retentionWindowMonths?: number;
+  now?: Date;
 }): Promise<{ compressed: number; archived: number; reclaimedBytes: number; skipped: number }> {
   const compressionWindowMonths = options?.compressionWindowMonths ?? 3;
   const retentionWindowMonths = options?.retentionWindowMonths ?? 6;
+  const now = options?.now ?? new Date();
 
   const partitions = await prisma.$queryRaw<Array<{ name: string; schema: string; parentTable: string; sizeBytes: number }>>`
     SELECT
@@ -87,7 +89,7 @@ export async function runPartitionRetentionJob(options?: {
       rangeEnd: inferPartitionRangeEnd(partition.name) ?? new Date(0),
       sizeBytes: Number(partition.sizeBytes ?? 0),
     })),
-    new Date(),
+    now,
     compressionWindowMonths,
     retentionWindowMonths,
   );
@@ -95,28 +97,41 @@ export async function runPartitionRetentionJob(options?: {
   let reclaimedBytes = 0;
   let compressed = 0;
   let archived = 0;
+  let failed = 0;
 
   await prisma.$executeRawUnsafe('CREATE SCHEMA IF NOT EXISTS "wraith_archive"');
 
   for (const partition of plan.compress) {
-    await prisma.$executeRawUnsafe(
-      `ALTER TABLE ${formatQualifiedIdentifier(partition.name)} SET (toast.compress = 'pglz')`
-    );
-    compressed += 1;
-    reclaimedBytes += partition.sizeBytes;
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE ${formatQualifiedIdentifier(partition.name)} SET (toast_tuple_target = 128)`
+      );
+      compressed += 1;
+      reclaimedBytes += partition.sizeBytes;
+    } catch (err) {
+      failed += 1;
+      console.warn(`[retention] Failed to compress partition ${partition.name}:`, err);
+    }
   }
 
   for (const partition of plan.archive) {
-    await prisma.$executeRawUnsafe(
-      `ALTER TABLE ${formatQualifiedIdentifier(partition.name)} SET SCHEMA "wraith_archive"`
-    );
-    archived += 1;
-    reclaimedBytes += partition.sizeBytes;
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE ${formatQualifiedIdentifier(partition.name)} SET SCHEMA "wraith_archive"`
+      );
+      archived += 1;
+      reclaimedBytes += partition.sizeBytes;
+    } catch (err) {
+      failed += 1;
+      console.warn(`[retention] Failed to archive partition ${partition.name}:`, err);
+    }
   }
+
+  const status = failed > 0 ? "partial_failure" : "completed";
 
   await prisma.$executeRawUnsafe(`
     INSERT INTO "wraith"."RetentionJobRun" ("compressed", "archived", "reclaimedBytes", "skipped", "status", "finishedAt")
-    VALUES (${compressed}, ${archived}, ${reclaimedBytes}, ${plan.skipped.length}, 'completed', NOW())
+    VALUES (${compressed}, ${archived}, ${reclaimedBytes}, ${plan.skipped.length}, '${status}', NOW())
   `);
 
   console.log(
