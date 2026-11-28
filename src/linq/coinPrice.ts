@@ -32,6 +32,15 @@
  * that is five times wrong is a loss.
  */
 
+/**
+ * TODO (#421):
+ * - Record counter & duration histogram labelled by outcome only:
+ *   success | http_error | timeout | unreachable | bad_book | out_of_band
+ * - Emit one structured log line per failure naming the outcome cause
+ * - Deduplicate concurrent in-flight fetches on cold cache (do not cache failures)
+ * - Keep client-facing error response (502 / provider_error / message) unchanged
+ */
+
 import { LinqError } from "./http";
 
 /** Circle's USDC on mainnet, identified by home domain rather than code. */
