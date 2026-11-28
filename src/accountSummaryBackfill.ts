@@ -1,4 +1,8 @@
+import { when } from "./prismaWhen";
+import type { Prisma } from "@prisma/client";
 import { parseNetwork, type Network } from "./network";
+import type { Prisma } from "@prisma/client";
+import { when } from "./prismaWhen";
 
 export const DEFAULT_BACKFILL_BATCH_SIZE = 5000;
 
@@ -348,7 +352,7 @@ export async function rebuildAccountSummaries(
     const batch = await db.tokenTransfer.findMany({
       where: {
         network,
-        ...(lastId !== undefined ? { id: { gt: lastId } } : {}),
+        ...when<Prisma.AccountSummaryWhereInput>(lastId !== undefined, { id: { gt: lastId } }),
       },
       orderBy: { id: "asc" },
       take: batchSize,

@@ -23,6 +23,7 @@
  *   this change retain their old shape until pruned after `RETENTION_DAYS`.
  */
 
+import { when } from "../prismaWhen";
 import * as StellarSdk from "@stellar/stellar-sdk";
 import { Prisma } from "@prisma/client";
 import { resolveNetwork, type Network } from "../network";
@@ -172,10 +173,10 @@ export async function queryHostFnLogs(
   const { network, contractId, functionName, limit = 50, offset = 0 } = params;
   const cap = Math.min(limit, 200);
 
-  const where = {
+  const where: Prisma.HostFnLogWhereInput = {
     network: resolveNetwork(network),
     contractId,
-    ...(functionName ? { functionName } : {}),
+    ...when<Prisma.HostFnLogWhereInput>(Boolean(functionName), { functionName }),
   };
 
   const [total, rows] = await prisma.$transaction([

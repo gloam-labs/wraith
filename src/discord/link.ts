@@ -12,8 +12,10 @@
 
 import { randomInt } from "crypto";
 import { Router, Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "../db";
+import { when } from "../prismaWhen";
 import { logger } from "../logger";
 import { isAccountAddress, isContractAddress, isVeilWallet, walletSigners } from "./chain";
 import { discordConfig, discordNetwork, passkeyRpId, type DiscordConfig } from "./config";
@@ -190,8 +192,14 @@ async function completeLink(config: DiscordConfig, req: Request, res: Response):
       await tx.discordMember.update({
         where: { discordUserId: other.discordUserId },
         data: {
-          ...(wallet && other.wallet === wallet ? { wallet: null, nonceHistory: [] } : {}),
-          ...(spending && other.spending === spending ? { spending: null, firstSeenAt: null } : {}),
+          ...when<Prisma.DiscordMemberUpdateInput>(Boolean(wallet && other.wallet === wallet), {
+            wallet: null,
+            nonceHistory: [],
+          }),
+          ...when<Prisma.DiscordMemberUpdateInput>(Boolean(spending && other.spending === spending), {
+            spending: null,
+            firstSeenAt: null,
+          }),
           names: [],
         },
       });

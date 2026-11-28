@@ -13,7 +13,8 @@
  * database, so both the page and the number of provider calls are capped.
  */
 
-import type { NgnOrder, OfframpOrder } from "@prisma/client";
+import { Prisma, type NgnOrder, type OfframpOrder } from "@prisma/client";
+import { when } from "../prismaWhen";
 
 import { prisma } from "../db";
 import { getBillStatus } from "../linq/bills";
@@ -175,12 +176,6 @@ async function recordAttempt(
   now: Date,
   needsHuman: boolean,
 ): Promise<void> {
-  const data = {
-    reconciliationAttempts: attempts,
-    lastReconciledAt: now,
-    ...(needsHuman ? { needsHuman: true } : {}),
-  };
-
   if (candidate.kind === "ngn") {
     await prisma.ngnOrder.update({
       where: {
@@ -189,7 +184,11 @@ async function recordAttempt(
           orderId: candidate.row.orderId,
         },
       },
-      data,
+      data: {
+        reconciliationAttempts: attempts,
+        lastReconciledAt: now,
+        ...when<Prisma.NgnOrderUpdateInput>(needsHuman, { needsHuman: true }),
+      },
     });
     return;
   }
@@ -201,7 +200,11 @@ async function recordAttempt(
         orderId: candidate.row.orderId,
       },
     },
-    data,
+    data: {
+      reconciliationAttempts: attempts,
+      lastReconciledAt: now,
+      ...when<Prisma.OfframpOrderUpdateInput>(needsHuman, { needsHuman: true }),
+    },
   });
 }
 

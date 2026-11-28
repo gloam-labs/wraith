@@ -19,6 +19,8 @@
  *     Never a NIN, never bank details, never an amount: NDPA, and this
  *     surface does not need them to answer its question.
  */
+import { when } from "../prismaWhen";
+import type { Prisma } from "@prisma/client";
 import { timingSafeEqual } from "crypto";
 import { Router, Request, Response, NextFunction } from "express";
 
@@ -167,11 +169,11 @@ export function createOpsRouter(): Router {
       // take: limit + 1 so we can tell if there is a next page without a separate count.
       const rows = await prisma.moneyFailure.findMany({
         where: {
-          ...(network ? { network } : {}),
-          ...(rail ? { rail } : {}),
-          ...(kind ? { kind } : {}),
-          ...(before !== undefined ? { id: { lt: before } } : {}),
-          ...(since !== undefined ? { createdAt: { gte: since } } : {}),
+          ...when<Prisma.MoneyFailureWhereInput>(Boolean(network), { network }),
+          ...when<Prisma.MoneyFailureWhereInput>(Boolean(rail), { rail }),
+          ...when<Prisma.MoneyFailureWhereInput>(Boolean(kind), { kind }),
+          ...when<Prisma.MoneyFailureWhereInput>(before !== undefined, { id: { lt: before } }),
+          ...when<Prisma.MoneyFailureWhereInput>(since !== undefined, { createdAt: { gte: since } }),
         },
         orderBy: { id: "desc" },
         take: limit + 1,

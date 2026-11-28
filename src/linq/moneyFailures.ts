@@ -26,6 +26,8 @@
  * database outage dims the table but never the alert.
  */
 import { prisma } from "../db";
+import { Prisma } from "@prisma/client";
+import { when } from "../prismaWhen";
 import { moneyFailuresTotal } from "../metrics";
 import { endingsOf, type ProviderEnding } from "./providerStatus";
 
@@ -135,8 +137,8 @@ export async function recordMoneyFailure(params: RecordMoneyFailureParams): Prom
       },
       update: {
         message,
-        ...(providerCode != null ? { providerCode } : {}),
-        ...(publicId != null ? { publicId } : {}),
+        ...when<Prisma.MoneyFailureUpdateInput>(providerCode != null, { providerCode }),
+        ...when<Prisma.MoneyFailureUpdateInput>(publicId != null, { publicId }),
         occurrences: { increment: 1 },
       },
     });
