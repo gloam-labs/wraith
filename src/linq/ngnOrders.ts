@@ -32,6 +32,7 @@
 import { prisma } from "../db";
 import { recordOrderTerminal, terminalStatusOf } from "../metrics";
 import { isFailureStatus, recordMoneyFailure } from "./moneyFailures";
+import { isRefundOrReversalInProgress } from "./providerStatus";
 import { crossCheckAmountNgn, NGN_SCALE_FACTOR, resolveEventNetwork } from "./webhook";
 
 export type NgnOrderKind = "onramp" | "bill";
@@ -196,6 +197,22 @@ export async function reconcileNgnOrder(event: {
   const status = event.status ?? event.event;
   const wasTerminal = terminalStatusOf(existing.status);
   const isTerminal = terminalStatusOf(status);
+  const isFailure = isFailureStatus(status);
+  const isUnwindMoving = isRefundOrReversalInProgress(status);
+
+  // Never let a late non-terminal event (such as an out-of-order
+  // `order.processing` webhook or a stale poll from the sweep) move a finished
+  // order back to in-flight or overwrite its settled figures. Terminal-to-
+  // terminal transitions (e.g. completed -> refunded), failure endings (e.g.
+  // `rejected`), and a refund or reversal in progress (e.g. `refund_pending`)
+  // remain allowed: an in-progress unwind updates status so the sweep picks it
+  // up again, and `recordMoneyFailure` runs when a final failure ending arrives.
+  if (wasTerminal && !isTerminal && !isFailure && !isUnwindMoving) {
+    console.warn(
+      `[linq] ignoring late non-terminal status "${status}" for ${existing.kind} order ${event.orderId} (already "${existing.status}")`,
+    );
+    return true;
+  }
 
   // Cross-check the provider's naira figure against the one we created the
   // order with. This is the only place both numbers exist: the router has the
@@ -242,7 +259,7 @@ export async function reconcileNgnOrder(event: {
   // this record the only thing that ever learns about the failure is a
   // client that happens to poll. A poll recording the same order hits the
   // same (network, kind, orderId) row, so webhook plus poll is one incident.
-  if (isFailureStatus(status)) {
+  if (isFailure) {
     await recordMoneyFailure({
       network: existing.network,
       rail: existing.kind === "bill" ? "bill" : "onramp",

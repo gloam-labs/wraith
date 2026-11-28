@@ -9,6 +9,7 @@
 import { prisma } from "../db";
 import { recordOrderTerminal, terminalStatusOf } from "../metrics";
 import { isFailureStatus, recordMoneyFailure } from "./moneyFailures";
+import { isRefundOrReversalInProgress } from "./providerStatus";
 import { resolveEventNetwork } from "./webhook";
 
 export interface OfframpReconciliationEvent {
@@ -47,6 +48,22 @@ export async function reconcileOfframpOrder(
   // wallet polling a finished order, from counting the same ending twice.
   const wasTerminal = terminalStatusOf(existing.status);
   const isTerminal = terminalStatusOf(status);
+  const isFailure = isFailureStatus(status);
+  const isUnwindMoving = isRefundOrReversalInProgress(status);
+
+  // Never let a late non-terminal event (such as an out-of-order
+  // `order.processing` webhook or a stale poll from the sweep) move a finished
+  // order back to in-flight or overwrite its settled figures. Terminal-to-
+  // terminal transitions (e.g. completed -> refunded), failure endings (e.g.
+  // `rejected`), and a refund or reversal in progress (e.g. `refund_pending`)
+  // remain allowed: an in-progress unwind updates status so the sweep picks it
+  // up again, and `recordMoneyFailure` runs when a final failure ending arrives.
+  if (wasTerminal && !isTerminal && !isFailure && !isUnwindMoving) {
+    console.warn(
+      `[linq] ignoring late non-terminal status "${status}" for offramp order ${event.orderId} (already "${existing.status}")`,
+    );
+    return true;
+  }
 
   await prisma.offrampOrder.update({
     where: { network_orderId: { network, orderId: event.orderId } },
@@ -65,7 +82,7 @@ export async function reconcileOfframpOrder(
   // path — webhook, status poll and the periodic sweep — goes through this
   // function, and the (network, kind, orderId) key turns several sightings of
   // one failed order into one incident rather than several alarms.
-  if (isFailureStatus(status)) {
+  if (isFailure) {
     await recordMoneyFailure({
       network: existing.network,
       rail: "offramp",

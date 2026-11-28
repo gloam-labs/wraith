@@ -115,3 +115,26 @@ export function endingsOf(status: string | null | undefined): ProviderEnding[] {
   const c = classifyProviderStatus(status);
   return c.kind === "ended" ? c.endings : [];
 }
+
+const UNWIND_ENDINGS: readonly ProviderEnding[] = ["refunded", "reversed"];
+
+/**
+ * True when a status is still `moving` and names a refund or reversal in
+ * progress (for example `refund_pending`, `awaiting_refund`, `reversal_pending`).
+ *
+ * Matched by whole words through {@link ENDING_WORDS}, so words like
+ * `nonrefundable` never match, ordinary in-progress statuses (`processing`,
+ * `pending`, `settled_pending`) return false, and completed endings (`refunded`,
+ * `reversed`) return false because their class is `ended`, not `moving`.
+ */
+export function isRefundOrReversalInProgress(
+  status: string | null | undefined,
+): boolean {
+  if (classifyProviderStatus(status).kind !== "moving") return false;
+  return statusWords(status).some((word) => {
+    const ending = Object.prototype.hasOwnProperty.call(ENDING_WORDS, word)
+      ? ENDING_WORDS[word]
+      : undefined;
+    return ending !== undefined && UNWIND_ENDINGS.includes(ending);
+  });
+}
