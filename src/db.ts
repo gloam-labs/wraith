@@ -49,6 +49,7 @@ export interface TransferRecord {
   eventType: string; // "transfer" | "mint" | "burn" | "clawback"
   fromAddress: string | null;
   toAddress: string | null;
+  toMuxedId?: string | null; // CAP-84 uint64 muxed contract ID as decimal string (#351)
   amount: string; // i128 as decimal string
   ledger: number;
   ledgerClosedAt: Date;
@@ -101,6 +102,7 @@ const TRANSFER_SELECTABLE_FIELDS = [
   "eventType",
   "fromAddress",
   "toAddress",
+  "toMuxedId",
   "amount",
   "ledger",
   "ledgerClosedAt",
@@ -146,6 +148,7 @@ const TRANSFER_FIELD_TYPES = {
   eventType: { type: "string" as const },
   fromAddress: { type: "string" as const },
   toAddress: { type: "string" as const },
+  toMuxedId: { type: "string" as const },
   amount: { type: "string" as const },
   ledger: { type: "number" as const },
   ledgerClosedAt: { type: "date" as const },
@@ -427,6 +430,7 @@ export type TransferQueryParams = {
   direction: "incoming" | "outgoing";
   contractId?: string;
   token?: string;
+  toMuxedId?: string;
   filter?: string;
   select?: string[];
   cursor?: string;
@@ -449,6 +453,7 @@ export async function queryTransfers(params: TransferQueryParams) {
     direction,
     contractId,
     token,
+    toMuxedId,
     filter,
     select,
     cursor,
@@ -466,6 +471,7 @@ export async function queryTransfers(params: TransferQueryParams) {
   const baseWhere: Prisma.TokenTransferWhereInput = {
     network: resolvedNetwork,
     ...(direction === "incoming" ? { toAddress: address } : { fromAddress: address }),
+    ...(toMuxedId ? { toMuxedId } : {}),
     ...(contractId ? { contractId } : {}),
     ...(token ? { contractId: token } : {}),
     ...(eventTypes?.length ? { eventType: { in: eventTypes } } : {}),
@@ -500,6 +506,7 @@ export async function queryTransfers(params: TransferQueryParams) {
         eventType: requestedSelect.includes("eventType"),
         fromAddress: requestedSelect.includes("fromAddress"),
         toAddress: requestedSelect.includes("toAddress"),
+        toMuxedId: requestedSelect.includes("toMuxedId"),
         amount: requestedSelect.includes("amount") || requestedSelect.includes("displayAmount"),
         ledger: requestedSelect.includes("ledger"),
         ledgerClosedAt: requestedSelect.includes("ledgerClosedAt"),
@@ -1075,6 +1082,7 @@ export async function queryAllTransfers(params: AllTransfersQueryParams) {
         eventType: requestedSelect.includes("eventType"),
         fromAddress: requestedSelect.includes("fromAddress"),
         toAddress: requestedSelect.includes("toAddress"),
+        toMuxedId: requestedSelect.includes("toMuxedId"),
         amount: requestedSelect.includes("amount") || requestedSelect.includes("displayAmount"),
         ledger: requestedSelect.includes("ledger"),
         ledgerClosedAt: requestedSelect.includes("ledgerClosedAt"),
